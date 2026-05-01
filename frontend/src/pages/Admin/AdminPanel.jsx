@@ -3,6 +3,8 @@ import { Navigate, useNavigate } from "react-router-dom";
 import Lottie from "lottie-react";
 import "./AdminPanel.css";
 import { adminApi } from "../../services/adminService";
+import { useAppModal } from "../../components/AppModal/AppModalProvider";
+import { useToast } from "../../components/Toast/ToastProvider";
 import adminAnimation from "../../assets/lottie/admin.json";
 
 const safeParse = (value) => {
@@ -22,11 +24,12 @@ const formatUptime = (seconds) => {
 
 const AdminPanel = () => {
   const navigate = useNavigate();
+  const modal = useAppModal();
+  const toast = useToast();
   const authUser = useMemo(() => safeParse(window.localStorage.getItem("authUser")) || {}, []);
 
   const isAdmin = authUser?.role === "admin";
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
 
   const [overview, setOverview] = useState(null);
   const [users, setUsers] = useState([]);
@@ -47,7 +50,6 @@ const AdminPanel = () => {
   const loadAll = async () => {
     try {
       setLoading(true);
-      setError("");
 
       const [overviewData, settingsData, healthData, reportsData, analyticsData] = await Promise.all([
         adminApi.getOverview(),
@@ -65,12 +67,13 @@ const AdminPanel = () => {
 
       await loadUsers(search);
     } catch (err) {
-      setError(err.message || "Failed to load admin data.");
+      await modal.error("Admin Load Failed", err.message || "Failed to load admin data.");
     } finally {
       setLoading(false);
     }
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     loadAll();
   }, []);
@@ -90,12 +93,16 @@ const AdminPanel = () => {
       await adminApi.updateUserPermissions(userId, { [key]: !currentValue });
       await loadUsers(search);
     } catch (err) {
-      setError(err.message || "Failed to update permission");
+      await modal.error("Permission Update Failed", err.message || "Failed to update permission");
     }
   };
 
   const handleDeleteUser = async (userId, email) => {
-    const confirmed = window.confirm(`Delete recruiter ${email}? This also removes their jobs and related interview records.`);
+    const confirmed = await modal.confirm(
+      "Delete Recruiter",
+      `Delete recruiter ${email}? This also removes their jobs and related interview records.`,
+      { confirmLabel: "Delete Recruiter" }
+    );
     if (!confirmed) {
       return;
     }
@@ -103,8 +110,9 @@ const AdminPanel = () => {
     try {
       await adminApi.deleteUser(userId);
       await loadAll();
+      toast.success(`${email} has been deleted successfully.`);
     } catch (err) {
-      setError(err.message || "Failed to delete recruiter");
+      await modal.error("Delete Failed", err.message || "Failed to delete recruiter");
     }
   };
 
@@ -113,7 +121,7 @@ const AdminPanel = () => {
     try {
       await loadUsers(search);
     } catch (err) {
-      setError(err.message || "Failed to search users");
+      await modal.error("Search Failed", err.message || "Failed to search users");
     }
   };
 
@@ -143,8 +151,9 @@ const AdminPanel = () => {
       };
       await adminApi.updateSettings(payload);
       await loadAll();
+      toast.success("AI and integrations settings were updated successfully.");
     } catch (err) {
-      setError(err.message || "Failed to save settings");
+      await modal.error("Save Failed", err.message || "Failed to save settings");
     } finally {
       setIsSavingSettings(false);
     }
@@ -180,8 +189,9 @@ const AdminPanel = () => {
       a.click();
       a.remove();
       window.URL.revokeObjectURL(url);
+      toast.success("System report has been generated and downloaded.");
     } catch (err) {
-      setError(err.message || "Failed to generate system report");
+      await modal.error("Report Failed", err.message || "Failed to generate system report");
     } finally {
       setIsGeneratingReport(false);
     }
@@ -206,7 +216,6 @@ const AdminPanel = () => {
       </header>
 
       {loading && <div className="admin-banner">Loading admin dashboard...</div>}
-      {error && <div className="admin-error">{error}</div>}
 
       {!loading && overview && (
         <section className="admin-grid admin-grid-kpis">

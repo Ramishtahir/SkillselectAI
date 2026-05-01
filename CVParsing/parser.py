@@ -260,44 +260,234 @@ def extract_personal_info_from_top(text: str, first_heading_pos: int = None) -> 
 
 # --- 5. SKILLS & MAIN LOGIC ---
 def extract_skills_clean(text: str) -> str:
-    anchors = ["language skills", "skills", "personal skills", "competences", "digital skills"]
-    for anchor in anchors:
-        block = slice_section_between_headings(text, [anchor], [
-            "work experience", "professional experience",
-            "education and training", "education",
-            "additional information", "projects", "references", "publications", "certificates"
-        ])
-        if not block: continue
-        block = remove_contact_and_urls(block)
-        block = block.strip()
-        if not block: continue
-        
-        first_100 = block[:200].lower()
-        if re.search(r'\b(i |i\'m|i am|aim to|objective|about myself)\b', first_100):
-            m = re.search(r'(languages?\s*[:\-]?)', block, flags=re.I)
-            if m:
-                start = m.start()
-                block = block[start:]
+    if not text:
+        return ""
+
+    section_headings = {
+        "work experience",
+        "professional experience",
+        "education and training",
+        "education",
+        "additional information",
+        "projects",
+        "references",
+        "publications",
+        "certificates",
+        "certifications",
+        "summary",
+        "profile",
+        "objective",
+        "about",
+        "about me",
+        "contact",
+        "projects",
+        "responsibilities",
+        "certifications",
+        "certificates",
+        "achievements",
+    }
+    skills_heading_variants = (
+        "skills",
+        "key skills",
+        "technical skills",
+        "core skills",
+        "professional skills",
+        "competencies",
+    )
+    heading_lookup = {v.lower() for v in skills_heading_variants}
+
+    def normalize_line(line: str) -> str:
+        return re.sub(r'\s+', ' ', line or '').strip()
+
+    def split_skills_heading(line: str):
+        value = normalize_line(line)
+        if not value:
+            return None
+
+        # Strict heading match: only a recognized skills heading can start extraction.
+        # Accept either heading-only lines ("Skills") or heading + inline list ("Skills: Python, SQL").
+        for heading in skills_heading_variants:
+            pat = re.compile(
+                r'^'
+                + re.escape(heading)
+                + r'\s*[:\-–—]?\s*(.*)$',
+                flags=re.I,
+            )
+            match = pat.match(value)
+            if not match:
+                continue
+
+            remainder = match.group(1).strip()
+            has_delimiter = bool(re.search(r'[:\-–—]', value))
+            if not remainder and not has_delimiter and value.lower() == heading.lower():
+                return heading.lower(), ""
+            if has_delimiter:
+                return heading.lower(), remainder
+        return None
+
+    def is_skills_heading(line: str) -> bool:
+        return split_skills_heading(line) is not None
+
+    def is_section_heading(line: str) -> bool:
+        value = normalize_line(line).lower().rstrip(':').rstrip('-').strip()
+        return value in section_headings
+
+    def clean_skill_token(token: str) -> str:
+        value = normalize_line(token)
+        value = re.sub(r'^[\-•*\u2022]+\s*', '', value)
+        value = re.sub(r'^\d+[\.\)]\s*', '', value)
+        value = re.sub(r'\b(basics?|fundamentals?|principles?|advanced|intermediate)\b$', '', value, flags=re.I)
+        value = re.sub(r'^\s*(and|or)\s+', '', value, flags=re.I)
+        value = re.sub(r'\s+', ' ', value).strip()
+        return value
+
+    def split_skill_values(value: str) -> List[str]:
+        raw = normalize_line(value)
+        if not raw:
+            return []
+
+        protected_terms = ["ci/cd", "qa/qc", "r&d", "ui/ux"]
+        placeholders = {}
+        normalized = raw
+        for i, term in enumerate(protected_terms):
+            placeholder = f"__SKILL_PROTECT_{i}__"
+            normalized = re.sub(re.escape(term), placeholder, normalized, flags=re.I)
+            placeholders[placeholder] = term
+
+        # Split by standard list delimiters first.
+        base_pieces = re.split(r'[;,|•·]', normalized)
+        pieces: List[str] = []
+
+        # Split slash-delimited entries only when each side is a compact token.
+        # This keeps phrases like "Visual Paradigm/Web Development" intact
+        # while still splitting "Git/GitHub" and "MongoDB/MySQL".
+        compact_slash_pattern = re.compile(
+            r'^[A-Za-z0-9.+#-]+(?:\s*/\s*[A-Za-z0-9.+#-]+)+$'
+        )
+        for piece in base_pieces:
+            candidate = piece.strip()
+            if not candidate:
+                continue
+            if compact_slash_pattern.fullmatch(candidate):
+                pieces.extend(re.split(r'\s*/\s*', candidate))
             else:
-                tech_keywords = ['python','java','react','javascript','c++','sql','aws','django','flask','node','express','react.js','tailwind','typescript','mongodb','postgres']
-                lines = [ln.strip() for ln in block.splitlines() if ln.strip()]
-                idx = None
-                for i,ln in enumerate(lines):
-                    ln_low = ln.lower()
-                    if any(k in ln_low for k in tech_keywords) or ln.count(',')>=2 or '/' in ln:
-                        idx = i
-                        break
-                if idx is not None:
-                    block = "\n".join(lines[idx:])
-        
-        block = re.sub(r'(work experience|education and training|education|language skills|skills|competences)', '', block, flags=re.I)
-        block = re.sub(r'\n{2,}', '\n', block).strip()
-        return block
-    return ""
+                pieces.append(candidate)
+
+        restored = []
+        for piece in pieces:
+            token = piece.strip()
+            for placeholder, original in placeholders.items():
+                token = token.replace(placeholder, original)
+            if token:
+                restored.append(token)
+        return restored
+
+    lines = [normalize_line(line) for line in clean_text_block(text).splitlines()]
+    in_skills = False
+    skills_lines = []
+    extracted = []
+    seen_lower = set()
+
+    for raw_line in lines:
+        if not raw_line:
+            continue
+
+        line = raw_line
+        if not in_skills:
+            heading_match = split_skills_heading(line)
+            if heading_match is not None:
+                in_skills = True
+                heading_name, remainder = heading_match
+                if remainder:
+                    skills_lines.append(remainder)
+            continue
+
+        # If we hit another section heading, stop processing skills
+        normalized = line.lower().rstrip(':').rstrip('-').strip()
+        if is_section_heading(line) and normalized not in heading_lookup:
+            break
+
+        # Parse the line - could be "Category: skill1, skill2" or a list-style line.
+        values = line
+        if ':' in line:
+            _, values = line.split(':', 1)
+
+        values = values.strip()
+        if not values or values.lower() in {"languages", "language", "frameworks", "libraries", "tools", "other", "skills", "technical skills"}:
+            continue
+
+        # Stop if we hit narrative text. This prevents descriptive statements from leaking as skills.
+        if not re.search(r'[;,|/•·]', values):
+            word_count = len(values.split())
+            if word_count >= 6 or re.search(r'\b(i am|i\s+have|experienced|motivated|passion|seeking|looking|gained|improved|developed)\b', values, flags=re.I):
+                break
+
+        skills_lines.append(values)
+
+    if not skills_lines:
+        return ""
+
+    parts: List[str] = []
+    for line in skills_lines:
+        parts.extend(split_skill_values(line))
+    if not parts:
+        parts = skills_lines
+
+    for part in parts:
+        skill = clean_skill_token(part)
+        if re.search(r'\bskills?\b', skill, flags=re.I) and len(skill.split()) >= 4:
+            continue
+        if skill and skill.lower() not in seen_lower:
+            extracted.append(skill)
+            seen_lower.add(skill.lower())
+
+    # Merge wrapped phrase skills split across lines, e.g.:
+    # "Visual" + "Paradigm", "Web" + "Development".
+    phrase_second_words = {
+        "development", "paradigm", "design", "management", "analysis",
+        "engineering", "science", "learning", "processing", "architecture",
+    }
+    merged = []
+    i = 0
+    while i < len(extracted):
+        cur = extracted[i].strip()
+        nxt = extracted[i + 1].strip() if i + 1 < len(extracted) else ""
+        if (
+            nxt
+            and len(cur.split()) == 1
+            and len(nxt.split()) == 1
+            and re.fullmatch(r'[A-Za-z][A-Za-z.+#-]*', cur)
+            and re.fullmatch(r'[A-Za-z][A-Za-z.+#-]*', nxt)
+            and nxt.lower() in phrase_second_words
+        ):
+            merged.append(f"{cur} {nxt}")
+            i += 2
+            continue
+        merged.append(cur)
+        i += 1
+
+    deduped = []
+    seen_final = set()
+    for item in merged:
+        key = item.lower()
+        if key not in seen_final:
+            deduped.append(item)
+            seen_final.add(key)
+
+    return "\n".join(deduped)
 
 def parse_europass_pdf(pdf_path: str) -> Dict:
     raw_text = extract_text_from_pdf(pdf_path)
     text = clean_text_block(raw_text)
+    # Debug signal to verify the raw PDF text actually contains a skills heading.
+    skills_match = re.search(r'\bskills\b', raw_text or "", flags=re.I)
+    if skills_match:
+        start = max(0, skills_match.start() - 80)
+        end = min(len(raw_text), skills_match.start() + 200)
+        sys.stderr.write(f"[parser] Skills heading snippet: {raw_text[start:end]}\n")
+    else:
+        sys.stderr.write("[parser] No skills heading found in raw PDF text.\n")
+    sys.stderr.write(f"[parser] Raw text length: {len(raw_text or '')}, Clean text length: {len(text or '')}\n")
     heading_candidates = [
         "work experience", "professional experience",
         "education and training", "education",
@@ -308,12 +498,26 @@ def parse_europass_pdf(pdf_path: str) -> Dict:
     first_heading_pos = matches[0][0] if matches else None
     
     personal = extract_personal_info_from_top(text, first_heading_pos)
-    work = slice_section_between_headings(text, ["work experience", "professional experience"], ["education and training", "education", "skills", "competences", "language skills", "languages"])
+    work = slice_section_between_headings(
+        text,
+        ["work experience", "professional experience"],
+        [
+            "education and training", "education",
+            "skills", "competences", "language skills", "languages",
+            "projects", "certifications", "certificates", "achievements",
+            "references", "additional information", "summary", "profile", "objective", "about", "contact"
+        ]
+    )
     work = remove_contact_and_urls(work)
     education = slice_section_between_headings(text, ["education and training", "education"], ["skills", "competences", "language skills", "languages", "work experience", "professional experience"])
     education = remove_contact_and_urls(education)
     skills = extract_skills_clean(text)
     skills = remove_contact_and_urls(skills)
+    if skills:
+        preview = skills[:200].replace("\n", " | ")
+        sys.stderr.write(f"[parser] Extracted skills count: {len(skills.splitlines())}, preview: {preview}\n")
+    else:
+        sys.stderr.write("[parser] Extracted skills is empty.\n")
     
     result = {"personal_info": personal, "work_experience": work, "education_and_training": education, "skills": skills}
     return result

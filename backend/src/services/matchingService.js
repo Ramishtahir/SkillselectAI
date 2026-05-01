@@ -44,6 +44,9 @@ function parseCVWithPython(cvPath) {
       if (code !== 0) {
         return reject(new Error(`Python Script Error (Code ${code}): ${stderr}`));
       }
+      if (stderr.trim()) {
+        console.log(`[matchingService] Python stderr:\n${stderr.trim()}`);
+      }
       if (!stdout) {
         return reject(new Error(`Python script gave no JSON output. Logs: ${stderr}`));
       }

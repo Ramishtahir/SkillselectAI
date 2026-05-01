@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useAppModal } from '../../components/AppModal/AppModalProvider';
 
 const InterviewStart = () => {
   const [searchParams] = useSearchParams();
@@ -7,6 +8,7 @@ const InterviewStart = () => {
   const [error, setError] = useState(null);
   const [interviewData, setInterviewData] = useState(null);
   const [startingInterview, setStartingInterview] = useState(false);
+  const modal = useAppModal();
 
   const token = searchParams.get('token');
 
@@ -50,10 +52,11 @@ const InterviewStart = () => {
     setStartingInterview(true);
     // Redirect to actual interview interface or start interview logic
     // For now, we'll just show a success message
-    setTimeout(() => {
+    setTimeout(async () => {
       // You can redirect to your actual interview interface here
       // window.location.href = '/interview/session';
-      alert('Interview interface would load here');
+      await modal.info('Interview Starting', 'Interview interface would load here.');
+      setStartingInterview(false);
     }, 1000);
   };
 

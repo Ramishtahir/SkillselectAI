@@ -6,7 +6,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { v4 as uuidv4 } from "uuid";
 import { processCVsAndMatch } from "../services/matchingService.js";
-import { generateQuestionsForJob } from "../services/questionGenerationService.js";
+import { ensureCompleteQuestionPoolForJob } from "../services/questionGenerationService.js";
 import fs from "fs";
 import Question from "../models/Question.js";
 
@@ -77,8 +77,15 @@ router.post("/", upload.array("cvs", 20), async (req, res) => {
       status: 'Active'
     });
 
-    // Generate questions in background
-    generateQuestionsForJob(jobDoc._id).catch(console.error);
+    // Generate and verify complete 30-question balanced pool before returning.
+    const generationResult = await ensureCompleteQuestionPoolForJob(jobDoc._id);
+    if (!generationResult.success) {
+      return res.status(500).json({
+        message: 'Job created but failed to generate complete question pool.',
+        jobId: jobDoc._id,
+        generation: generationResult
+      });
+    }
 
     // Process CVs if any
     if (cvs.length > 0) {
@@ -93,7 +100,8 @@ router.post("/", upload.array("cvs", 20), async (req, res) => {
 
     res.status(201).json({
       message: "Job created successfully",
-      jobId: jobDoc._id
+      jobId: jobDoc._id,
+      questionPool: generationResult.actualCounts
     });
   } catch (error) {
     console.error('Error creating job:', error);
@@ -171,7 +179,7 @@ router.post("/generate-bulk", async (req, res) => {
     
     let processedJobs = 0;
     let skippedJobs = 0;
-    let generatedQuestions = 0;
+    let completedQuestionPools = 0;
     
     // Process each job
     for (const job of allJobs) {
@@ -193,12 +201,12 @@ router.post("/generate-bulk", async (req, res) => {
         
         // Generate fresh questions (10/10/10 distribution)
         console.log(`Generating questions for job: ${job.title}`);
-        const result = await generateQuestionsForJob(job._id);
+        const result = await ensureCompleteQuestionPoolForJob(job._id);
         
         if (result.success) {
           processedJobs++;
-          generatedQuestions += result.relevantCount || 0;
-          console.log(`✅ Generated ${result.relevantCount} questions for ${job.title}`);
+          completedQuestionPools++;
+          console.log(`✅ Question pool ready for ${job.title}:`, result.actualCounts);
         } else {
           console.log(`❌ Failed to generate questions for ${job.title}: ${result.message}`);
         }
@@ -214,7 +222,7 @@ router.post("/generate-bulk", async (req, res) => {
         totalJobs: allJobs.length,
         processedJobs,
         skippedJobs,
-        generatedQuestions,
+        completedQuestionPools,
         successRate: processedJobs > 0 ? (processedJobs / (processedJobs + skippedJobs)) * 100 : 0
       }
     });

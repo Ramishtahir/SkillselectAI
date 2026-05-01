@@ -12,8 +12,12 @@ import InterviewPage from "./pages/InterviewPage";
 import Settings from "./pages/Settings/Settings";
 import AdminLogin from "./pages/Admin/AdminLogin";
 import AdminPanel from "./pages/Admin/AdminPanel";
+import ForgotPasswordPage from "./pages/Auth/ForgotPasswordPage";
+import ResetPasswordPage from "./pages/Auth/ResetPasswordPage";
 import LoadingProvider from "./components/LoadingOverlay/LoadingProvider";
 import LoadingOverlay from "./components/LoadingOverlay/LoadingOverlay";
+import AppModalProvider from "./components/AppModal/AppModalProvider";
+import ToastProvider from "./components/Toast/ToastProvider";
 
 function Dashboard() {
   const [showDashboard, setShowDashboard] = useState(false);
@@ -66,13 +70,19 @@ function Dashboard() {
 function App() {
   return (
     <LoadingProvider>
-      <LoadingOverlay />
-      <Routes>
-        <Route path="/admin/login" element={<AdminLogin />} />
-        <Route path="/admin/*" element={<AdminPanel />} />
-        <Route path="/interview" element={<InterviewPage />} />
-        <Route path="/*" element={<Dashboard />} />
-      </Routes>
+      <AppModalProvider>
+        <ToastProvider>
+          <LoadingOverlay />
+          <Routes>
+            <Route path="/admin/login" element={<AdminLogin />} />
+            <Route path="/admin/*" element={<AdminPanel />} />
+            <Route path="/interview" element={<InterviewPage />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
+            <Route path="/*" element={<Dashboard />} />
+          </Routes>
+        </ToastProvider>
+      </AppModalProvider>
     </LoadingProvider>
   );
 }

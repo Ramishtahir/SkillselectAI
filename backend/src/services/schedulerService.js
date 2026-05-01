@@ -4,6 +4,10 @@ import { google } from 'googleapis';
 import Interview from '../models/Interview.js';
 import Candidate from '../models/Candidate.js';
 import Job from '../models/Job.js';
+import Question from '../models/Question.js';
+import {
+  getApprovedQuestionPoolStatus
+} from './questionRandomizationService.js';
 
 // Setup Google Auth (You need these in your .env file)
 console.log('Google OAuth Setup:');
@@ -90,6 +94,25 @@ const createGoogleCalendarEvent = async (candidateEmail, startTime, meetingLink)
 };
 
 export const processInvitesForJob = async (jobId) => {
+  // Enforce approved question minimum before invite scheduling.
+  const approvedQuestions = await Question.find({ jobId, status: 'Approved' }).select('difficulty');
+  const poolStatus = getApprovedQuestionPoolStatus(approvedQuestions);
+
+  if (!poolStatus.hasMinimumApproved) {
+    throw new Error(
+      `At least ${poolStatus.minApprovedRequired} approved questions are required before sending invites. Found ${poolStatus.approvedCount}.`
+    );
+  }
+
+  // Enforce balanced pool support (3 Easy, 4 Medium, 3 Hard) for per-candidate fairness.
+  if (!poolStatus.hasBalancedDifficultySupport) {
+    const missing = poolStatus.missingByDifficulty;
+    const required = poolStatus.requiredDistribution;
+    throw new Error(
+      `Approved questions cannot satisfy balanced interview distribution (${required.Easy} Easy, ${required.Medium} Medium, ${required.Hard} Hard). Missing: Easy=${missing.Easy}, Medium=${missing.Medium}, Hard=${missing.Hard}.`
+    );
+  }
+
   // 1. Idempotency Check (Prevent Double Clicking)
   const existingInterviews = await Interview.exists({ jobId: jobId });
   if (existingInterviews) {

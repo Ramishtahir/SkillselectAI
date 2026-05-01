@@ -1,4 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
+import { useAppModal } from "../../components/AppModal/AppModalProvider";
+import { useToast } from "../../components/Toast/ToastProvider";
 import "./JobManagement.css";
 
 const JobManagement = () => {
@@ -9,7 +11,8 @@ const JobManagement = () => {
   const [cvFiles, setCvFiles] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-  const [showSuccess, setShowSuccess] = useState(false);
+  const modal = useAppModal();
+  const toast = useToast();
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -25,11 +28,11 @@ const JobManagement = () => {
 
   const handleAddJob = async () => {
     if (!jobName.trim() || !jobDescription.trim()) {
-      alert("Please enter both job name and description.");
+      await modal.info("Missing Details", "Please enter both job name and description.");
       return;
     }
     if (cvFiles.length === 0) {
-      alert("Please upload at least one CV before posting the job.");
+      await modal.info("No CV Uploaded", "Please upload at least one CV before posting the job.");
       return;
     }
 
@@ -47,28 +50,40 @@ const JobManagement = () => {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Upload failed");
-      
-      setShowSuccess(true);
-      setTimeout(() => setShowSuccess(false), 3000);
+
       refreshJobs();
       setJobName("");
       setJobDescription("");
       setInterviewType("video");
       setCvFiles([]);
+      toast.success("Job posted successfully.");
     } catch (err) {
-      alert(err.message);
+      await modal.error("Job Posting Failed", err.message || "Something went wrong while posting the job.");
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this job?")) return;
+    const shouldDelete = await modal.confirm(
+      "Delete Job",
+      "Are you sure you want to delete this job?",
+      { confirmLabel: "Delete Job" }
+    );
+
+    if (!shouldDelete) {
+      return;
+    }
+
     try {
-      await fetch(`http://localhost:5000/api/jobs/${id}`, { method: "DELETE" });
+      const response = await fetch(`http://localhost:5000/api/jobs/${id}`, { method: "DELETE" });
+      if (!response.ok) {
+        throw new Error("Failed to delete job");
+      }
       refreshJobs();
+      toast.success("Job deleted successfully.");
     } catch (e) {
-      alert("Failed to delete job");
+      await modal.error("Delete Failed", "Failed to delete job. Please try again.");
     }
   };
 
@@ -99,14 +114,6 @@ const JobManagement = () => {
 
   return (
     <div className="jm-container">
-      {/* Success Toast */}
-      {showSuccess && (
-        <div className="jm-toast">
-          <span className="jm-toast-icon">✓</span>
-          Job posted successfully!
-        </div>
-      )}
-
       {/* Header */}
       <header className="jm-header">
         <div className="jm-header-content">

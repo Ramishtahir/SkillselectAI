@@ -1,5 +1,6 @@
-// 1. Import useState
-import React, { useState } from 'react';
+// 1. Import useEffect and useState
+import React, { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import './LandingPage.css';
 // 2. Import the new Modal component
 import AuthModal from '../../components/AuthModal/AuthModal';
@@ -7,13 +8,28 @@ import AuthModal from '../../components/AuthModal/AuthModal';
 // Note: We removed 'onLogin' prop as the modal handles it internally now, 
 // but kept it in definition just in case you use it elsewhere.
 const LandingPage = ({ onLogin }) => {
+  const [searchParams, setSearchParams] = useSearchParams();
   
   // 3. State to manage modal visibility
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const authMode = searchParams.get('auth');
 
   // Helper functions to open/close modal
   const openModal = () => setShowAuthModal(true);
-  const closeModal = () => setShowAuthModal(false);
+  const closeModal = () => {
+    setShowAuthModal(false);
+    if (authMode) {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete('auth');
+      setSearchParams(nextParams, { replace: true });
+    }
+  };
+
+  useEffect(() => {
+    if (authMode === 'login' || authMode === 'signup') {
+      setShowAuthModal(true);
+    }
+  }, [authMode]);
 
   return (
     <div 
@@ -165,6 +181,7 @@ const LandingPage = ({ onLogin }) => {
         isOpen={showAuthModal}
         onClose={closeModal}
         onAuthSuccess={onLogin}
+        initialMode={authMode === 'signup' ? 'signup' : 'login'}
       />
 
     </div>

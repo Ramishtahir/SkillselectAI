@@ -93,6 +93,19 @@
 }
 .auth-form input::placeholder { color: var(--text-gray); }
 .auth-form input:focus { border-color: var(--accent-lavender); box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15); }
+.auth-form input.input-invalid {
+  border-color: #ef4444;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
+}
+
+.input-error-text {
+  width: 100%;
+  margin: 4px 0 8px;
+  text-align: left;
+  color: #ef4444;
+  font-size: 0.85rem;
+  line-height: 1.35;
+}
 
 .input-icon {
   position: absolute; right: 25px; top: 50%;

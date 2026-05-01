@@ -5,6 +5,8 @@ const userSchema = new mongoose.Schema(
     name: { type: String, trim: true },
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     passwordHash: { type: String, required: true },
+    resetPasswordTokenHash: { type: String, default: null },
+    resetPasswordExpiresAt: { type: Date, default: null },
     role: { type: String, enum: ["admin", "recruiter", "candidate"], default: "recruiter" },
     permissions: {
       manageRecruiters: { type: Boolean, default: false },

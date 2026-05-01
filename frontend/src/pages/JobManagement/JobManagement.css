@@ -10,38 +10,6 @@
   font-family: 'Inter', 'Poppins', sans-serif;
 }
 
-/* =====================
-   Toast Notification
-   ===================== */
-.jm-toast {
-  position: fixed;
-  top: 20px;
-  right: 20px;
-  background: var(--success);
-  color: #FFFFFF;
-  padding: 12px 18px;
-  border-radius: 12px;
-  font-size: 0.9rem;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-weight: 600;
-  box-shadow: 0 10px 30px rgba(34, 197, 94, 0.25);
-  animation: slideIn 0.4s ease-out;
-  z-index: 1000;
-}
-
-.jm-toast-icon {
-  width: 24px;
-  height: 24px;
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 14px;
-}
-
 @keyframes slideIn {
   from {
     transform: translateX(100px);

@@ -2,8 +2,9 @@
 import express from 'express';
 import Question from '../models/Question.js';
 import QuestionTemplate from '../models/QuestionTemplate.js';
-import { generateQuestionsForJob } from '../services/questionGenerationService.js';
+import { ensureCompleteQuestionPoolForJob } from '../services/questionGenerationService.js';
 import questionValidationService from '../services/questionValidationService.js';
+import { getApprovedQuestionPoolStatus } from '../services/questionRandomizationService.js';
 
 const router = express.Router();
 
@@ -35,6 +36,31 @@ router.get('/jobs/:jobId/questions', async (req, res) => {
   } catch (error) {
     console.error('Error fetching questions:', error);
     res.status(500).json({ message: 'Error fetching questions' });
+  }
+});
+
+// Get live approved-question pool status for recruiter invite readiness
+router.get('/jobs/:jobId/approved-status', async (req, res) => {
+  try {
+    const approvedQuestions = await Question.find({
+      jobId: req.params.jobId,
+      status: 'Approved'
+    }).select('difficulty');
+
+    const status = getApprovedQuestionPoolStatus(approvedQuestions);
+
+    res.json({
+      success: true,
+      jobId: req.params.jobId,
+      ...status
+    });
+  } catch (error) {
+    console.error('Error fetching approved question status:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching approved question status',
+      error: error.message
+    });
   }
 });
 
@@ -96,7 +122,10 @@ router.patch('/:id', async (req, res) => {
 router.post('/jobs/:jobId/generate', async (req, res) => {
   try {
     const jobId = req.params.jobId;
-    const result = await generateQuestionsForJob(jobId);
+    const result = await ensureCompleteQuestionPoolForJob(jobId);
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
     res.json(result);
   } catch (error) {
     console.error('Error generating questions:', error);

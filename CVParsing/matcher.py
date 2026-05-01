@@ -78,8 +78,8 @@ def extract_skills_from_text(text):
 def compute_enhanced_similarity(jd_text: str, cv_text: str) -> float:
     """
     Enhanced similarity computation using multiple methods:
-    1. TF-IDF cosine similarity (30% weight)
-    2. Skills-based matching (50% weight)
+    1. TF-IDF cosine similarity (25% weight)
+    2. Skills-based matching (55% weight)
     3. Keyword overlap bonus (20% weight)
     """
     # Clean texts
@@ -129,11 +129,19 @@ def compute_enhanced_similarity(jd_text: str, cv_text: str) -> float:
     else:
         keyword_overlap = 0.0
     
+    # Small bonus for high skill coverage to improve ranking confidence.
+    skill_bonus = 0.0
+    if jd_skills:
+        if skill_score >= 0.75:
+            skill_bonus = 0.08
+        elif skill_score >= 0.5:
+            skill_bonus = 0.04
+
     # Weighted combination
-    final_score = (tfidf_score * 0.30) + (skill_score * 0.50) + (keyword_overlap * 0.20)
-    
-    # Scale up and ensure meaningful range (15-95%)
-    scaled_score = min(0.95, max(0.15, final_score * 1.5 + 0.15))
+    final_score = (tfidf_score * 0.25) + (skill_score * 0.55) + (keyword_overlap * 0.20) + skill_bonus
+
+    # Scale up and ensure a stronger score range (20-98%)
+    scaled_score = min(0.98, max(0.20, final_score * 1.6 + 0.20))
     
     return scaled_score
 

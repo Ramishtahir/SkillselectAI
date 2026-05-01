@@ -1,600 +1,750 @@
-// backend/src/services/questionGenerationService.js
 import Question from '../models/Question.js';
 import QuestionTemplate from '../models/QuestionTemplate.js';
 import ContentPool from '../models/ContentPool.js';
 import Job from '../models/Job.js';
 
-// Sample question templates (you can move these to a separate file or database)
+const ROLE_PROFILES = [
+  {
+    key: 'software-engineering',
+    name: 'Software Engineering',
+    templateCategories: ['Software Engineering'],
+    contentCategories: ['general', 'backend', 'web', 'frontend'],
+    titleKeywords: ['software engineer', 'software developer', 'engineer'],
+    descriptionKeywords: ['algorithms', 'data structures', 'oop', 'testing', 'code quality'],
+    primarySkills: ['algorithms', 'data structures', 'object-oriented programming', 'testing', 'version control'],
+    excludedKeywords: []
+  },
+  {
+    key: 'ml',
+    name: 'Machine Learning Engineering',
+    templateCategories: ['Machine Learning Engineering'],
+    contentCategories: ['ai', 'data'],
+    titleKeywords: [
+      'ai engineer', 'ml engineer', 'machine learning', 'artificial intelligence', 'deep learning',
+      'nlp', 'computer vision', 'llm', 'genai', 'generative ai', 'applied scientist', 'ai researcher',
+      'ai developer', 'prompt engineer', 'ai/ml engineer', 'mlops engineer', 'applied ai engineer'
+    ],
+    descriptionKeywords: [
+      'model training', 'model evaluation', 'feature engineering', 'deep learning', 'neural network',
+      'tensorflow', 'pytorch', 'mlops', 'inference', 'embedding', 'prompt engineering', 'rag',
+      'fine-tuning', 'hyperparameter tuning', 'model serving', 'vector database', 'retrieval augmented generation'
+    ],
+    primarySkills: [
+      'machine learning', 'deep learning', 'model evaluation', 'feature engineering', 'data preprocessing',
+      'tensorflow', 'pytorch', 'scikit-learn', 'python', 'mlops', 'computer vision', 'nlp', 'llm',
+      'transformers', 'hugging face', 'model deployment', 'experiment tracking', 'model monitoring'
+    ],
+    excludedKeywords: [
+      'react', 'angular', 'vue', 'html', 'css', 'frontend', 'node.js api', 'spring boot api', 'rest controller ui',
+      'ui component', 'responsive design', 'dom manipulation', 'css framework', 'pixel-perfect'
+    ]
+  },
+  {
+    key: 'data-science',
+    name: 'Data Science',
+    templateCategories: ['Data Science'],
+    contentCategories: ['ai', 'data'],
+    titleKeywords: ['data scientist', 'data science', 'research scientist'],
+    descriptionKeywords: ['statistics', 'hypothesis testing', 'eda', 'data analysis', 'experimentation', 'causal inference', 'regression analysis'],
+    primarySkills: ['python', 'pandas', 'numpy', 'statistics', 'model evaluation', 'a/b testing', 'visualization', 'feature importance', 'experimental design'],
+    excludedKeywords: ['react', 'angular', 'vue', 'html', 'css', 'frontend', 'backend api', 'kubernetes administration', 'terraform modules']
+  },
+  {
+    key: 'full-stack',
+    name: 'Full Stack Development',
+    templateCategories: ['Full Stack Development'],
+    contentCategories: ['web', 'frontend', 'backend', 'api'],
+    titleKeywords: ['full stack', 'full-stack', 'fullstack'],
+    descriptionKeywords: ['end-to-end', 'frontend and backend', 'react', 'node', 'api integration', 'database'],
+    primarySkills: ['react', 'javascript', 'typescript', 'node.js', 'rest api', 'sql', 'mongodb', 'authentication'],
+    excludedKeywords: ['deep learning', 'computer vision', 'threat hunting', 'kubernetes operator']
+  },
+  {
+    key: 'data-engineering',
+    name: 'Data Engineering',
+    templateCategories: ['Data Engineering'],
+    contentCategories: ['data', 'cloud'],
+    titleKeywords: ['data engineer', 'analytics engineer', 'etl engineer'],
+    descriptionKeywords: ['etl', 'elt', 'pipeline', 'spark', 'airflow', 'warehouse'],
+    primarySkills: ['sql', 'spark', 'airflow', 'data pipeline', 'warehouse', 'dbt', 'kafka'],
+    excludedKeywords: ['react', 'angular', 'vue', 'html', 'css', 'frontend']
+  },
+  {
+    key: 'web-development',
+    name: 'Web Development',
+    templateCategories: ['Web Development'],
+    contentCategories: ['web', 'frontend', 'backend'],
+    titleKeywords: ['web developer', 'web engineer', 'web application developer'],
+    descriptionKeywords: ['html', 'css', 'javascript', 'web application', 'browser compatibility'],
+    primarySkills: ['html', 'css', 'javascript', 'web performance', 'rest api', 'responsive design'],
+    excludedKeywords: ['deep learning', 'mlops', 'threat modeling']
+  },
+  {
+    key: 'frontend',
+    name: 'Frontend Development',
+    templateCategories: ['Frontend Development', 'Web Development'],
+    contentCategories: ['web', 'frontend'],
+    titleKeywords: ['frontend', 'front end', 'ui engineer', 'web developer'],
+    descriptionKeywords: ['react', 'angular', 'vue', 'javascript', 'typescript', 'css', 'html', 'state management', 'web performance'],
+    primarySkills: ['html', 'css', 'javascript', 'typescript', 'react', 'angular', 'vue', 'accessibility', 'web performance', 'component design', 'state management'],
+    excludedKeywords: ['kubernetes', 'terraform', 'pytorch', 'neural network', 'computer vision', 'etl pipeline', 'distributed training', 'model serving']
+  },
+  {
+    key: 'api-engineering',
+    name: 'API Engineering',
+    templateCategories: ['API Engineering'],
+    contentCategories: ['api', 'backend'],
+    titleKeywords: ['api engineer', 'integration engineer', 'platform api'],
+    descriptionKeywords: ['rest api', 'graphql', 'api gateway', 'rate limiting', 'oauth'],
+    primarySkills: ['rest api', 'graphql', 'api versioning', 'api security', 'rate limiting', 'webhooks'],
+    excludedKeywords: ['react ui', 'css', 'computer vision', 'neural network']
+  },
+  {
+    key: 'backend',
+    name: 'Backend Development',
+    templateCategories: ['Backend Development', 'API Engineering'],
+    contentCategories: ['backend', 'api'],
+    titleKeywords: ['backend', 'back end', 'api engineer', 'server engineer'],
+    descriptionKeywords: ['microservices', 'rest api', 'graphql', 'database', 'distributed systems', 'event-driven architecture', 'message queue'],
+    primarySkills: ['node.js', 'java', 'python', 'go', 'sql', 'redis', 'rest api', 'graphql', 'caching', 'queue processing', 'database indexing'],
+    excludedKeywords: ['react', 'angular', 'vue', 'css', 'html', 'computer vision', 'neural network', 'wireframing', 'figma design']
+  },
+  {
+    key: 'cloud-engineering',
+    name: 'Cloud Engineering',
+    templateCategories: ['Cloud Engineering'],
+    contentCategories: ['cloud', 'devops'],
+    titleKeywords: ['cloud engineer', 'cloud platform engineer', 'cloud infrastructure'],
+    descriptionKeywords: ['aws', 'azure', 'gcp', 'iac', 'scalability', 'load balancing'],
+    primarySkills: ['aws', 'azure', 'gcp', 'terraform', 'infrastructure as code', 'cloud networking'],
+    excludedKeywords: ['react', 'angular', 'vue', 'computer vision', 'nlp']
+  },
+  {
+    key: 'devops',
+    name: 'DevOps',
+    templateCategories: ['DevOps'],
+    contentCategories: ['devops', 'cloud'],
+    titleKeywords: ['devops engineer', 'devops', 'platform engineer'],
+    descriptionKeywords: ['kubernetes', 'docker', 'terraform', 'observability', 'ci/cd'],
+    primarySkills: ['docker', 'kubernetes', 'terraform', 'ci/cd', 'helm', 'ansible', 'monitoring'],
+    excludedKeywords: ['react', 'angular', 'vue', 'html', 'css', 'neural network', 'computer vision']
+  },
+  {
+    key: 'sre',
+    name: 'Site Reliability Engineering',
+    templateCategories: ['Site Reliability Engineering'],
+    contentCategories: ['sre', 'devops', 'cloud'],
+    titleKeywords: ['site reliability engineer', 'sre', 'reliability engineer'],
+    descriptionKeywords: ['slo', 'sla', 'incident response', 'on-call', 'error budget'],
+    primarySkills: ['slo', 'sla', 'incident management', 'observability', 'monitoring', 'capacity planning'],
+    excludedKeywords: ['react', 'angular', 'vue', 'html', 'css', 'computer vision']
+  },
+  {
+    key: 'qa',
+    name: 'Quality Assurance',
+    templateCategories: ['Quality Assurance'],
+    contentCategories: ['qa', 'web', 'backend'],
+    titleKeywords: ['qa engineer', 'test engineer', 'quality assurance', 'automation tester'],
+    descriptionKeywords: ['test automation', 'unit testing', 'integration testing', 'regression testing', 'selenium'],
+    primarySkills: ['test planning', 'automation testing', 'selenium', 'cypress', 'postman', 'api testing'],
+    excludedKeywords: ['computer vision', 'deep learning', 'terraform', 'kubernetes administration']
+  },
+  {
+    key: 'security',
+    name: 'Security Engineering',
+    templateCategories: ['Security Engineering'],
+    contentCategories: ['security'],
+    titleKeywords: ['security engineer', 'application security', 'cloud security', 'security analyst'],
+    descriptionKeywords: ['threat model', 'owasp', 'vulnerability', 'penetration testing', 'identity'],
+    primarySkills: ['owasp', 'threat modeling', 'authentication', 'authorization', 'encryption', 'siem'],
+    excludedKeywords: ['react', 'angular', 'vue', 'html', 'css', 'neural network']
+  },
+  {
+    key: 'mobile',
+    name: 'Mobile Development',
+    templateCategories: ['Android Development', 'iOS Development', 'Mobile Development'],
+    contentCategories: ['mobile'],
+    titleKeywords: ['android', 'ios', 'mobile', 'flutter', 'react native'],
+    descriptionKeywords: ['kotlin', 'swift', 'objective-c', 'mobile app', 'play store', 'app store'],
+    primarySkills: ['android', 'ios', 'kotlin', 'swift', 'flutter', 'react native'],
+    excludedKeywords: ['terraform', 'kubernetes', 'neural network', 'computer vision']
+  },
+  {
+    key: 'android-development',
+    name: 'Android Development',
+    templateCategories: ['Android Development'],
+    contentCategories: ['mobile'],
+    titleKeywords: ['android developer', 'android engineer', 'android'],
+    descriptionKeywords: ['kotlin', 'jetpack', 'android sdk', 'room database'],
+    primarySkills: ['android', 'kotlin', 'android sdk', 'jetpack compose', 'mvvm'],
+    excludedKeywords: ['swift', 'ios', 'react ui', 'terraform']
+  },
+  {
+    key: 'ios-development',
+    name: 'iOS Development',
+    templateCategories: ['iOS Development'],
+    contentCategories: ['mobile'],
+    titleKeywords: ['ios developer', 'ios engineer', 'iphone developer'],
+    descriptionKeywords: ['swift', 'swiftui', 'xcode', 'cocoatouch'],
+    primarySkills: ['ios', 'swift', 'swiftui', 'xcode', 'combine'],
+    excludedKeywords: ['kotlin', 'android', 'react ui', 'terraform']
+  },
+  {
+    key: 'software-architecture',
+    name: 'Software Architecture',
+    templateCategories: ['Software Architecture'],
+    contentCategories: ['architecture', 'backend', 'cloud'],
+    titleKeywords: ['software architect', 'solution architect', 'systems architect'],
+    descriptionKeywords: ['distributed architecture', 'scalability', 'trade-offs', 'resilience patterns'],
+    primarySkills: ['system design', 'distributed systems', 'architecture patterns', 'scalability', 'resilience'],
+    excludedKeywords: ['css', 'html', 'pixel perfect', 'basic dom manipulation']
+  },
+  {
+    key: 'technical-leadership',
+    name: 'Technical Leadership',
+    templateCategories: ['Technical Leadership'],
+    contentCategories: ['management', 'general'],
+    titleKeywords: ['tech lead', 'technical lead', 'engineering lead'],
+    descriptionKeywords: ['architecture decisions', 'mentoring', 'technical strategy', 'delivery ownership'],
+    primarySkills: ['technical mentoring', 'architecture leadership', 'delivery planning', 'cross-team collaboration'],
+    excludedKeywords: ['basic html css', 'entry level tutorial', 'junior-only coding drills']
+  },
+  {
+    key: 'engineering-management',
+    name: 'Engineering Management',
+    templateCategories: ['Engineering Management'],
+    contentCategories: ['management', 'general'],
+    titleKeywords: ['engineering manager', 'development manager', 'software manager'],
+    descriptionKeywords: ['people management', 'performance management', 'hiring', 'roadmapping'],
+    primarySkills: ['team management', 'stakeholder management', 'planning', 'coaching', 'hiring strategy'],
+    excludedKeywords: ['low-level framework syntax', 'frontend styling trivia', 'deep learning optimization']
+  },
+  {
+    key: 'technical-program-management',
+    name: 'Technical Program Management',
+    templateCategories: ['Technical Program Management'],
+    contentCategories: ['management', 'general'],
+    titleKeywords: ['technical program manager', 'tpm', 'program manager technical'],
+    descriptionKeywords: ['cross-functional execution', 'program risk', 'milestones', 'dependency management'],
+    primarySkills: ['program planning', 'risk management', 'stakeholder communication', 'execution tracking'],
+    excludedKeywords: ['css selectors', 'neural network tuning', 'android lifecycle internals']
+  },
+  {
+    key: 'product-engineering',
+    name: 'Product Engineering',
+    templateCategories: ['Product Engineering'],
+    contentCategories: ['general', 'web', 'backend'],
+    titleKeywords: ['product engineer', 'product development engineer'],
+    descriptionKeywords: ['customer impact', 'feature iteration', 'experimentation', 'product metrics'],
+    primarySkills: ['product thinking', 'feature design', 'experimentation', 'analytics', 'cross-functional execution'],
+    excludedKeywords: ['deep learning fine-tuning', 'kernel optimization', 'penetration exploit development']
+  },
+  {
+    key: 'developer-experience',
+    name: 'Developer Experience',
+    templateCategories: ['Developer Experience'],
+    contentCategories: ['api', 'backend', 'devops'],
+    titleKeywords: ['developer experience', 'dx engineer', 'developer productivity engineer'],
+    descriptionKeywords: ['tooling', 'build systems', 'developer workflows', 'internal platform'],
+    primarySkills: ['ci/cd', 'build tooling', 'developer tooling', 'internal platforms', 'observability'],
+    excludedKeywords: ['computer vision', 'ui animation', 'ios swiftui']
+  },
+  {
+    key: 'blockchain-development',
+    name: 'Blockchain Development',
+    templateCategories: ['Blockchain Development'],
+    contentCategories: ['blockchain', 'backend'],
+    titleKeywords: ['blockchain developer', 'smart contract engineer', 'web3 engineer'],
+    descriptionKeywords: ['smart contracts', 'solidity', 'consensus', 'on-chain', 'ethereum'],
+    primarySkills: ['solidity', 'smart contracts', 'web3', 'ethereum', 'contract security'],
+    excludedKeywords: ['react css animation', 'computer vision', 'android sdk']
+  },
+  {
+    key: 'ar-vr-development',
+    name: 'AR/VR Development',
+    templateCategories: ['AR/VR Development'],
+    contentCategories: ['ar/vr', 'mobile'],
+    titleKeywords: ['ar developer', 'vr developer', 'xr engineer', 'mixed reality engineer'],
+    descriptionKeywords: ['unity', 'unreal', 'rendering pipeline', 'spatial computing', '3d interaction'],
+    primarySkills: ['unity', 'unreal engine', '3d graphics', 'spatial computing', 'interaction design'],
+    excludedKeywords: ['terraform', 'kubernetes', 'sql indexing', 'llm fine-tuning']
+  },
+  {
+    key: 'general-se',
+    name: 'Software Engineering',
+    templateCategories: [
+      'Software Engineering',
+      'Full Stack Development',
+      'Backend Development',
+      'Frontend Development'
+    ],
+    contentCategories: ['general', 'backend', 'web', 'frontend'],
+    titleKeywords: ['software engineer', 'developer', 'engineer'],
+    descriptionKeywords: ['programming', 'testing', 'system design', 'api', 'web application'],
+    primarySkills: ['data structures', 'algorithms', 'testing', 'api design', 'version control'],
+    excludedKeywords: []
+  }
+];
+
+const SENIORITY_BANDS = [
+  {
+    level: 'intern',
+    keywords: ['intern', 'internship', 'trainee'],
+    quotas: { Easy: 18, Medium: 10, Hard: 2 }
+  },
+  {
+    level: 'entry',
+    keywords: ['entry level', 'entry-level', 'fresher', 'graduate', 'junior'],
+    quotas: { Easy: 15, Medium: 11, Hard: 4 }
+  },
+  {
+    level: 'mid',
+    keywords: ['mid', 'mid-level', 'intermediate', '2+ years', '3+ years', '4+ years'],
+    quotas: { Easy: 8, Medium: 14, Hard: 8 }
+  },
+  {
+    level: 'senior',
+    keywords: ['senior', 'staff', 'lead', 'principal', 'architect', '5+ years', '6+ years', '7+ years', '8+ years'],
+    quotas: { Easy: 4, Medium: 10, Hard: 16 }
+  }
+];
+
+const FIXED_DIFFICULTY_QUOTAS = {
+  Easy: 10,
+  Medium: 10,
+  Hard: 10
+};
+
+const ROLE_SKILL_PATTERNS = {
+  'software-engineering': [
+    'algorithms', 'data structures', 'oop', 'testing', 'code review', 'version control', 'problem solving'
+  ],
+  ml: [
+    'machine learning', 'deep learning', 'neural network', 'nlp', 'computer vision', 'tensorflow', 'pytorch',
+    'scikit-learn', 'feature engineering', 'model evaluation', 'model deployment', 'model monitoring',
+    'mlops', 'llm', 'transformers', 'embedding', 'vector database', 'prompt engineering', 'rag'
+  ],
+  'data-science': [
+    'data science', 'statistics', 'hypothesis testing', 'regression', 'classification', 'python', 'pandas',
+    'numpy', 'a/b testing', 'visualization', 'tableau', 'power bi', 'feature importance', 'causal inference'
+  ],
+  backend: [
+    'rest api', 'graphql', 'microservices', 'distributed systems', 'sql', 'postgresql', 'mysql', 'mongodb',
+    'redis', 'kafka', 'rabbitmq', 'node.js', 'spring boot', 'express', 'database indexing', 'caching'
+  ],
+  frontend: [
+    'html', 'css', 'javascript', 'typescript', 'react', 'angular', 'vue', 'redux', 'state management',
+    'accessibility', 'responsive design', 'web performance', 'component library', 'vite', 'webpack'
+  ],
+  'full-stack': [
+    'react', 'node.js', 'rest api', 'sql', 'mongodb', 'authentication', 'end-to-end development', 'typescript'
+  ],
+  'web-development': [
+    'html', 'css', 'javascript', 'web performance', 'browser compatibility', 'responsive design', 'rest api'
+  ],
+  'api-engineering': [
+    'rest api', 'graphql', 'api gateway', 'api versioning', 'oauth', 'rate limiting', 'webhooks', 'openapi'
+  ],
+  'data-engineering': [
+    'etl', 'elt', 'data pipeline', 'spark', 'airflow', 'dbt', 'warehouse', 'lakehouse', 'kafka', 'batch processing'
+  ],
+  'cloud-engineering': [
+    'aws', 'azure', 'gcp', 'terraform', 'infrastructure as code', 'cloud networking', 'autoscaling', 'iam'
+  ],
+  devops: [
+    'docker', 'kubernetes', 'terraform', 'ci/cd', 'observability', 'prometheus', 'grafana', 'incident response'
+  ],
+  sre: [
+    'slo', 'sla', 'error budget', 'incident response', 'on-call', 'observability', 'capacity planning'
+  ],
+  qa: [
+    'automation testing', 'regression testing', 'api testing', 'selenium', 'cypress', 'test plans', 'qa strategy'
+  ],
+  security: [
+    'owasp', 'threat modeling', 'vulnerability assessment', 'penetration testing', 'authentication', 'authorization'
+  ],
+  mobile: [
+    'android', 'ios', 'kotlin', 'swift', 'flutter', 'react native', 'mobile app', 'play store', 'app store'
+  ],
+  'android-development': [
+    'android', 'kotlin', 'android sdk', 'jetpack compose', 'mvvm', 'room', 'retrofit'
+  ],
+  'ios-development': [
+    'ios', 'swift', 'swiftui', 'xcode', 'combine', 'uikit', 'core data'
+  ],
+  'software-architecture': [
+    'system design', 'distributed systems', 'architecture patterns', 'scalability', 'resilience', 'trade-offs'
+  ],
+  'technical-leadership': [
+    'technical strategy', 'mentoring', 'architecture decisions', 'cross-team alignment', 'delivery leadership'
+  ],
+  'engineering-management': [
+    'people management', 'hiring', 'performance management', 'roadmapping', 'stakeholder management'
+  ],
+  'technical-program-management': [
+    'program planning', 'dependency management', 'risk management', 'cross-functional execution', 'milestones'
+  ],
+  'product-engineering': [
+    'product thinking', 'experimentation', 'feature iteration', 'analytics', 'customer impact'
+  ],
+  'developer-experience': [
+    'developer tooling', 'build systems', 'ci/cd', 'internal platform', 'developer workflows', 'productivity'
+  ],
+  'blockchain-development': [
+    'smart contracts', 'solidity', 'web3', 'ethereum', 'on-chain', 'consensus', 'gas optimization'
+  ],
+  'ar-vr-development': [
+    'unity', 'unreal engine', '3d graphics', 'xr', 'spatial computing', 'rendering', 'interaction design'
+  ]
+};
+
+const ROLE_CROSS_DOMAIN_BLOCKLIST = {
+  'software-engineering': [
+    'llm fine tuning', 'smart contract gas optimization', 'swiftui layout constraints', 'kubernetes operator'
+  ],
+  ml: [
+    'react', 'angular', 'vue', 'html', 'css', 'responsive design', 'ui component', 'dom', 'scss',
+    'microservices', 'crud api', 'rest controller', 'spring mvc'
+  ],
+  'data-science': [
+    'react', 'angular', 'vue', 'html', 'css', 'terraform', 'kubernetes', 'frontend routing', 'pixel perfect'
+  ],
+  backend: [
+    'react', 'angular', 'vue', 'html', 'css', 'figma', 'wireframe', 'computer vision', 'neural network', 'llm fine tuning'
+  ],
+  frontend: [
+    'kubernetes', 'terraform', 'incident response', 'distributed training', 'neural network', 'computer vision',
+    'feature store', 'mlops', 'model drift'
+  ],
+  'full-stack': [
+    'distributed training', 'slo error budget', 'threat hunting', 'smart contract audit'
+  ],
+  'web-development': [
+    'llm inference optimization', 'incident commander', 'smart contract reentrancy', 'android activity lifecycle'
+  ],
+  'api-engineering': [
+    'css animation', 'figma prototype', 'computer vision', 'android ui kit'
+  ],
+  'data-engineering': [
+    'css', 'react hooks', 'dom', 'wireframe', 'swiftui'
+  ],
+  'cloud-engineering': [
+    'react hooks', 'css grid', 'computer vision', 'a b testing ui', 'android mvvm'
+  ],
+  devops: [
+    'react component lifecycle', 'css box model', 'computer vision', 'nlp transformer fine tuning'
+  ],
+  sre: [
+    'react', 'angular', 'vue', 'html', 'css', 'neural network', 'computer vision', 'smart contract'
+  ],
+  qa: [
+    'distributed model training', 'kubernetes operator internals', '3d rendering pipeline', 'swiftui'
+  ],
+  security: [
+    'css', 'react hooks', 'figma', 'unity shader', 'llm prompt tuning'
+  ],
+  mobile: [
+    'terraform', 'kubernetes', 'feature store', 'graphql federation architecture'
+  ],
+  'android-development': [
+    'ios swiftui', 'terraform', 'kubernetes', 'llm fine tuning'
+  ],
+  'ios-development': [
+    'android jetpack compose', 'terraform', 'kubernetes', 'llm fine tuning'
+  ],
+  'software-architecture': [
+    'basic css styling', 'entry level dom manipulation', 'android xml layout trivia'
+  ],
+  'technical-leadership': [
+    'css selector specificity', 'python for loops basics', 'android intent basics'
+  ],
+  'engineering-management': [
+    'frontend pixel perfect css', 'llm transformer math derivation', 'smart contract opcode details'
+  ],
+  'technical-program-management': [
+    'css animation curve tuning', 'pytorch tensor broadcasting', 'android low-level render thread'
+  ],
+  'product-engineering': [
+    'kubernetes operator internals', 'llm positional encoding derivation', 'smart contract bytecode'
+  ],
+  'developer-experience': [
+    'css keyframes trivia', 'computer vision bounding box iou proofs', 'ios auto layout edge cases'
+  ],
+  'blockchain-development': [
+    'css grid', 'react suspense', 'computer vision', 'kubernetes hpa', 'swiftui'
+  ],
+  'ar-vr-development': [
+    'terraform modules', 'kubernetes pod disruption budget', 'sql index tuning', 'oauth refresh token flow'
+  ]
+};
+
+const TOKEN_STOPWORDS = new Set([
+  'the', 'and', 'for', 'with', 'that', 'this', 'from', 'into', 'your', 'you', 'are', 'our', 'will', 'would',
+  'what', 'when', 'where', 'which', 'how', 'use', 'using', 'build', 'design', 'implement', 'experience',
+  'knowledge', 'ability', 'understanding', 'work', 'working', 'role', 'team', 'project', 'system'
+]);
+
 const DEFAULT_TEMPLATES = [
   {
-    template: "Explain the concept of [concept] in [technology]",
-    type: "Conceptual",
-    difficulty: "Medium",
-    skill: "General"
+    text: 'Explain {concept} and when you would apply it.',
+    type: 'Conceptual',
+    difficulty: 'Easy',
+    placeholders: ['concept'],
+    category: 'Software Engineering',
+    skillMappings: ['Software Engineering']
   },
   {
-    template: "How would you implement [feature] in [technology]?",
-    type: "Technical",
-    difficulty: "Medium",
-    skill: "General"
+    text: 'How would you implement {feature} in a production system?',
+    type: 'Technical',
+    difficulty: 'Medium',
+    placeholders: ['feature'],
+    category: 'Software Engineering',
+    skillMappings: ['Software Engineering', 'System Design']
   },
   {
-    template: "What are the best practices for [concept] in [technology]?",
-    type: "Behavioral",
-    difficulty: "Easy",
-    skill: "General"
+    text: 'Describe a scenario where {concept} failed and how you mitigated it.',
+    type: 'Scenario',
+    difficulty: 'Hard',
+    placeholders: ['concept'],
+    category: 'Software Engineering',
+    skillMappings: ['Software Engineering', 'Troubleshooting']
   }
 ];
 
 export const generateQuestionsForJob = async (jobId) => {
   try {
-    console.log('\n' + '🎯'.repeat(30));
-    console.log('📝 QUESTION GENERATION STARTED');
-    console.log(`Target: 30 questions (10 Easy, 10 Medium, 10 Hard)`);
-    console.log(`Job ID: ${jobId}`);
-    console.log('🎯'.repeat(30) + '\n');
-    
-    // 1. Get job details
     const job = await Job.findById(jobId);
     if (!job) {
       throw new Error('Job not found');
     }
-    
-    console.log(`Job Title: ${job.title}`);
-    console.log(`Job Description length: ${(job.description || '').length} characters\n`);
 
-    // 2. Extract skills from job description
-    const jobDesc = job.description || '';
-    const jobSkills = extractSkillsFromDescription(jobDesc);
-    console.log('Extracted skills from job description:', jobSkills);
+    const title = (job.title || '').trim();
+    const description = (job.description || '').trim();
+    const roleProfile = detectRoleProfile(title, description);
+    const seniority = detectSeniority(title, description);
 
-    // 3. Get or create question templates
-    let templates = await QuestionTemplate.find({});
+    if (!roleProfile) {
+      throw new Error('Unable to confidently determine the job role. Please provide a clearer job title/description.');
+    }
+
+    const requiredSkills = extractRequiredSkills(title, description, roleProfile);
+
+    let templates = await QuestionTemplate.find({ isActive: { $ne: false } });
     if (templates.length === 0) {
       templates = await seedDefaultTemplates();
     }
 
-    // 4. Get content pool
-    const contentPool = await ContentPool.find({});
-    const contentMap = new Map();
-    
-    contentPool.forEach(item => {
-      contentMap.set(item.placeholderType, item.values || []);
+    const strictTemplates = filterTemplatesForRole({
+      templates,
+      roleProfile,
+      requiredSkills,
+      title,
+      description
     });
 
-    // 5. Filter templates based on comprehensive job role detection for perfect relevance
-    let templatesToUse;
-    
-    // Determine job role from job title and description
-    const jobTitle = (job.title || '').toLowerCase();
-    const jobDescLower = (job.description || '').toLowerCase();
-    
-    // 📱 MOBILE DEVELOPMENT ROLES
-    if (jobTitle.includes('mobile') || jobTitle.includes('ios') || jobTitle.includes('android')) {
-      if (jobTitle.includes('android')) {
-        templatesToUse = templates.filter(t => t.category === 'Android Development');
-        console.log(`Using ${templatesToUse.length} Android-specific templates`);
-      } else if (jobTitle.includes('ios')) {
-        templatesToUse = templates.filter(t => t.category === 'iOS Development');
-        console.log(`Using ${templatesToUse.length} iOS-specific templates`);
-      } else {
-        templatesToUse = templates.filter(t => t.category === 'Mobile Development');
-        console.log(`Using ${templatesToUse.length} mobile-specific templates`);
-      }
-    }
-    // 🌐 WEB DEVELOPMENT
-    else if (jobTitle.includes('web developer') || jobTitle.includes('web application')) {
-      templatesToUse = templates.filter(t => t.category === 'Web Development');
-      console.log(`Using ${templatesToUse.length} web development templates`);
-    }
-    // 🚀 DEVOPS & PLATFORM ROLES
-    else if (jobTitle.includes('devops') || jobTitle.includes('dev-ops')) {
-      templatesToUse = templates.filter(t => t.category === 'DevOps');
-      console.log(`Using ${templatesToUse.length} devops templates`);
-    } else if (jobTitle.includes('sre') || jobTitle.includes('site reliability')) {
-      templatesToUse = templates.filter(t => t.category === 'Site Reliability Engineering');
-      console.log(`Using ${templatesToUse.length} SRE templates`);
-    } else if (jobTitle.includes('cloud engineer') || jobTitle.includes('cloud')) {
-      templatesToUse = templates.filter(t => t.category === 'Cloud Engineering');
-      console.log(`Using ${templatesToUse.length} cloud engineering templates`);
-    }
-    // 🧪 QUALITY & DELIVERY ROLES
-    else if (jobTitle.includes('qa') || jobTitle.includes('test engineer') || jobTitle.includes('quality assurance')) {
-      templatesToUse = templates.filter(t => t.category === 'Quality Assurance');
-      console.log(`Using ${templatesToUse.length} QA templates`);
-    } else if (jobTitle.includes('automation test') || jobTitle.includes('test automation')) {
-      templatesToUse = templates.filter(t => t.category === 'Quality Assurance');
-      console.log(`Using ${templatesToUse.length} automation testing templates`);
-    } else if (jobTitle.includes('performance test') || jobTitle.includes('performance engineer')) {
-      templatesToUse = templates.filter(t => t.category === 'Quality Assurance');
-      console.log(`Using ${templatesToUse.length} performance testing templates`);
-    }
-    // 🔐 SECURITY ROLES
-    else if (jobTitle.includes('security engineer') || jobTitle.includes('application security') || jobTitle.includes('cloud security')) {
-      templatesToUse = templates.filter(t => t.category === 'Security Engineering');
-      console.log(`Using ${templatesToUse.length} security engineering templates`);
-    }
-    // 📊 DATA & AI ROLES
-    else if (jobTitle.includes('data engineer') || jobTitle.includes('data pipeline')) {
-      templatesToUse = templates.filter(t => t.category === 'Data Engineering');
-      console.log(`Using ${templatesToUse.length} data engineering templates`);
-    } else if (jobTitle.includes('data scientist') || jobTitle.includes('data science') || jobTitle.includes('data analyst')) {
-      templatesToUse = templates.filter(t => t.category === 'Data Science');
-      console.log(`Using ${templatesToUse.length} data science templates`);
-    } else if (
-      jobTitle.includes('machine learning') || jobTitle.includes('ml engineer') ||
-      jobTitle.includes('ai engineer') || jobTitle.includes('ai developer') ||
-      jobTitle.includes('artificial intelligence') ||
-      jobTitle.includes('deep learning') || jobTitle.includes('neural network') ||
-      jobTitle.includes('nlp') || jobTitle.includes('natural language processing') ||
-      jobTitle.includes('computer vision') || jobTitle.includes('cv engineer') ||
-      jobTitle.includes('llm') || jobTitle.includes('large language model') ||
-      jobTitle.includes('genai') || jobTitle.includes('generative ai') ||
-      jobTitle.includes('ai/ml') || jobTitle.includes('ml/ai') ||
-      jobTitle.includes('ai specialist') || jobTitle.includes('ai researcher') ||
-      jobTitle.includes('prompt engineer') || jobTitle.includes('ai ops') ||
-      jobTitle.includes('applied scientist') || jobTitle.includes('research scientist') ||
-      jobTitle.includes('data science') ||
-      (jobTitle.includes('ai') && !jobTitle.includes('maintain') && !jobTitle.includes('contain'))
-    ) {
-      templatesToUse = templates.filter(t => t.category === 'Machine Learning Engineering');
-      console.log(`Using ${templatesToUse.length} AI/ML engineering templates`);
-    } else if (jobTitle.includes('mlops') || jobTitle.includes('analytics engineer')) {
-      templatesToUse = templates.filter(t => t.category === 'Machine Learning Engineering');
-      console.log(`Using ${templatesToUse.length} MLOps templates`);
-    }
-    // 🧠 ARCHITECTURE & SENIOR ROLES
-    else if (jobTitle.includes('architect') || jobTitle.includes('solutions architect') || jobTitle.includes('enterprise architect')) {
-      templatesToUse = templates.filter(t => t.category === 'Software Architecture');
-      console.log(`Using ${templatesToUse.length} architecture templates`);
-    } else if (jobTitle.includes('technical lead') || jobTitle.includes('engineering lead') || jobTitle.includes('tech lead')) {
-      templatesToUse = templates.filter(t => t.category === 'Technical Leadership');
-      console.log(`Using ${templatesToUse.length} technical leadership templates`);
-    }
-    // 📱 EMERGING & SPECIALIZED ROLES
-    else if (jobTitle.includes('blockchain') || jobTitle.includes('smart contract')) {
-      templatesToUse = templates.filter(t => t.category === 'Blockchain Development');
-      console.log(`Using ${templatesToUse.length} blockchain templates`);
-    } else if (jobTitle.includes('ar/vr') || jobTitle.includes('ar') || jobTitle.includes('vr') || jobTitle.includes('augmented reality') || jobTitle.includes('virtual reality')) {
-      templatesToUse = templates.filter(t => t.category === 'AR/VR Development');
-      console.log(`Using ${templatesToUse.length} AR/VR templates`);
-    } else if (jobTitle.includes('game developer') || jobTitle.includes('game development')) {
-      templatesToUse = templates.filter(t => t.category === 'AR/VR Development');
-      console.log(`Using ${templatesToUse.length} game development templates`);
-    } else if (jobTitle.includes('embedded') || jobTitle.includes('iot')) {
-      templatesToUse = templates.filter(t => t.category === 'AR/VR Development');
-      console.log(`Using ${templatesToUse.length} embedded/IoT templates`);
-    }
-    // 🧩 SUPPORTING & HYBRID ROLES
-    else if (jobTitle.includes('api engineer') || jobTitle.includes('api development')) {
-      templatesToUse = templates.filter(t => t.category === 'API Engineering');
-      console.log(`Using ${templatesToUse.length} API engineering templates`);
-    } else if (jobTitle.includes('dx engineer') || jobTitle.includes('developer experience') || jobTitle.includes('tools engineer')) {
-      templatesToUse = templates.filter(t => t.category === 'Developer Experience');
-      console.log(`Using ${templatesToUse.length} developer experience templates`);
-    } else if (jobTitle.includes('build engineer') || jobTitle.includes('release engineer') || jobTitle.includes('integration engineer')) {
-      templatesToUse = templates.filter(t => t.category === 'DevOps');
-      console.log(`Using ${templatesToUse.length} build/release/integration templates`);
-    }
-    // 🎯 SOFT-SKILL HEAVY ENGINEERING ROLES
-    else if (jobTitle.includes('engineering manager') || jobTitle.includes('manager')) {
-      templatesToUse = templates.filter(t => t.category === 'Engineering Management');
-      console.log(`Using ${templatesToUse.length} engineering management templates`);
-    } else if (jobTitle.includes('tpm') || jobTitle.includes('technical program manager') || jobTitle.includes('program manager')) {
-      templatesToUse = templates.filter(t => t.category === 'Technical Program Management');
-      console.log(`Using ${templatesToUse.length} TPM templates`);
-    } else if (jobTitle.includes('product engineer') || jobTitle.includes('product development')) {
-      templatesToUse = templates.filter(t => t.category === 'Product Engineering');
-      console.log(`Using ${templatesToUse.length} product engineering templates`);
-    }
-    // 🎨 FRONTEND DEVELOPMENT (Fallback for traditional roles)
-    else if (jobTitle.includes('frontend') || jobTitle.includes('front end') || jobDescLower.includes('html') || jobDescLower.includes('css') || jobDescLower.includes('react') || jobDescLower.includes('angular') || jobDescLower.includes('vue')) {
-      // Try Frontend Development first, then fall back to Web Development
-      templatesToUse = templates.filter(t => t.category === 'Frontend Development');
-      if (templatesToUse.length === 0) {
-        templatesToUse = templates.filter(t => t.category === 'Web Development');
-        console.log(`Using ${templatesToUse.length} web development templates (frontend fallback)`);
-      } else {
-        console.log(`Using ${templatesToUse.length} frontend-specific templates`);
-      }
-    }
-    // ⚙️ BACKEND DEVELOPMENT (Fallback for traditional roles)
-    else if (jobTitle.includes('backend') || jobTitle.includes('back end') || jobDescLower.includes('java') || jobDescLower.includes('python') || jobDescLower.includes('node') || jobDescLower.includes('api')) {
-      templatesToUse = templates.filter(t => t.category === 'Backend Development');
-      console.log(`Using ${templatesToUse.length} backend-specific templates`);
-    }
-    // 🔧 FULL STACK (Fallback)
-    else if (jobTitle.includes('full stack') || jobTitle.includes('full-stack')) {
-      templatesToUse = templates.filter(t => t.category === 'Full Stack Development');
-      console.log(`Using ${templatesToUse.length} full-stack templates`);
-    }
-    else {
-      // Fallback to all templates if role not detected
-      templatesToUse = templates;
-      console.log(`Role not detected, using all ${templatesToUse.length} templates`);
+    if (strictTemplates.length === 0) {
+      throw new Error(`No role-specific templates found for ${roleProfile.name}.`);
     }
 
-    // CRITICAL: If no templates found for specific role, use ALL templates as fallback
-    if (templatesToUse.length === 0) {
-      console.warn(`No templates found for role. Using all available templates as fallback.`);
-      templatesToUse = templates;
+    const contentPool = await ContentPool.find({});
+    const contentMap = new Map();
+    for (const item of contentPool) {
+      const values = (item.values || []).filter(v => v && v.isActive !== false);
+      contentMap.set(item.placeholderType, values);
     }
 
-    // 6. Generate questions with strict difficulty quotas (Three-Bucket Approach)
-    const questions = [];
-    const usedTexts = new Set();
-    const maxAttempts = 500; // Increased from 200 to ensure we generate 30 questions
-    let attempts = 0;
+    const existingQuestions = await Question.find({ jobId }).select('text difficulty');
+    const existingCounts = {
+      Easy: existingQuestions.filter(q => String(q.difficulty || '').toLowerCase() === 'easy').length,
+      Medium: existingQuestions.filter(q => String(q.difficulty || '').toLowerCase() === 'medium').length,
+      Hard: existingQuestions.filter(q => String(q.difficulty || '').toLowerCase() === 'hard').length
+    };
 
-    const targetQuotas = { Easy: 10, Medium: 10, Hard: 10 };
-    const currentCounts = { Easy: 0, Medium: 0, Hard: 0 };
-    
-    // Generate questions for each difficulty level separately
+    const quotas = {
+      Easy: Math.max(0, FIXED_DIFFICULTY_QUOTAS.Easy - existingCounts.Easy),
+      Medium: Math.max(0, FIXED_DIFFICULTY_QUOTAS.Medium - existingCounts.Medium),
+      Hard: Math.max(0, FIXED_DIFFICULTY_QUOTAS.Hard - existingCounts.Hard)
+    };
+
+    if (quotas.Easy === 0 && quotas.Medium === 0 && quotas.Hard === 0) {
+      return {
+        success: true,
+        message: 'Job already has a complete 30-question balanced pool (10 Easy, 10 Medium, 10 Hard).',
+        questions: [],
+        totalGenerated: 0,
+        role: roleProfile.name,
+        seniority: seniority.level,
+        targetQuotas: FIXED_DIFFICULTY_QUOTAS,
+        actualCounts: existingCounts
+      };
+    }
+
+    const generatedQuestions = [];
+    const usedTexts = new Set(existingQuestions.map(q => String(q.text || '').trim()).filter(Boolean));
+    const templateUsage = new Map();
+
     for (const difficulty of ['Easy', 'Medium', 'Hard']) {
-      const targetCount = targetQuotas[difficulty];
-      let difficultyTemplates = templatesToUse.filter(t => t.difficulty === difficulty);
-      
-      // If no templates for this difficulty, use ALL templates (they'll be reused with different placeholders)
-      if (difficultyTemplates.length === 0) {
-        console.warn(`No ${difficulty} templates found. Using all templates.`);
-        difficultyTemplates = templatesToUse;
-      }
-      
-      console.log(`Generating ${targetCount} ${difficulty} questions from ${difficultyTemplates.length} templates`);
-      
-      while (currentCounts[difficulty] < targetCount && attempts < maxAttempts) {
-        attempts++;
-        
-        if (difficultyTemplates.length === 0) {
-          console.warn(`No templates available. Stopping.`);
-          break;
-        }
-        
-        const randomIndex = Math.floor(Math.random() * difficultyTemplates.length);
-        let template = difficultyTemplates[randomIndex];
+      const target = quotas[difficulty] || 0;
+      if (target === 0) continue;
 
-        // If template doesn't have correct difficulty, clone it with the target difficulty
-        if (template.difficulty !== difficulty) {
-          template = { ...template, difficulty };
-        }
+      const poolForDifficulty = strictTemplates.filter(t => t.difficulty === difficulty);
+      const fallbackPool = poolForDifficulty.length > 0 ? poolForDifficulty : strictTemplates;
+      const maxUsagePerTemplate = Math.max(8, Math.ceil((target * 3) / Math.max(1, fallbackPool.length)));
+      let attempts = 0;
+      const maxAttempts = target * 50;
 
-        // Skip if we've already used this template too many times (max 3 times to allow enough variety for 30 questions)
-        const templateKey = template._id.toString();
-        const templateUsageCount = questions.filter(q => q.templateId?.toString() === templateKey).length;
-        if (templateUsageCount >= 3) {
+      while (countByDifficulty(generatedQuestions, difficulty) < target && attempts < maxAttempts) {
+        attempts += 1;
+        const template = fallbackPool[Math.floor(Math.random() * fallbackPool.length)];
+        if (!template) break;
+
+        const usageKey = String(template._id || template.text);
+        if ((templateUsage.get(usageKey) || 0) >= maxUsagePerTemplate) {
           continue;
         }
 
-      // Replace placeholders with content from pool, prioritizing job-specific skills
-      let questionText = template.text; // Use 'text' field instead of 'template'
-      const placeholders = questionText.match(/\{(.*?)\}/g) || [];
-      let hasInvalidContent = false; // Flag to track if we couldn't find appropriate content
-      
-      for (const placeholder of placeholders) {
-        const placeholderType = placeholder.substring(1, placeholder.length - 1); // Remove { and }
-        const contentItems = contentMap.get(placeholderType) || [];
-        
-        if (contentItems.length > 0) {
-          let selectedContent;
-          
-          // Priority 1: Use job-specific skills if they match this placeholder type
-          const matchingJobSkills = contentItems.filter(item => 
-            jobSkills.some(skill => 
-              item.value.toLowerCase() === skill.toLowerCase() ||
-              skill.toLowerCase().includes(item.value.toLowerCase()) ||
-              item.value.toLowerCase().includes(skill.toLowerCase())
-            )
-          );
-          
-          if (matchingJobSkills.length > 0) {
-            // Use job-specific content
-            selectedContent = matchingJobSkills[Math.floor(Math.random() * matchingJobSkills.length)];
-            console.log(`✅ Using job-specific skill: ${selectedContent.value} for placeholder ${placeholderType}`);
-          } else {
-            // Priority 2: Use role-appropriate content (STRICT MATCHING)
-            const roleAppropriateContent = contentItems.filter(item => {
-              const itemCategory = item.category?.toLowerCase() || '';
-              const jobTitleLower = jobTitle.toLowerCase();
-              
-              // Match content category to job role - COMPREHENSIVE MATCHING
-              if (jobTitleLower.includes('mobile') || jobTitleLower.includes('android') || jobTitleLower.includes('ios')) {
-                return itemCategory === 'mobile';
-              } else if (jobTitleLower.includes('web') || jobTitleLower.includes('frontend') || jobTitleLower.includes('front-end')) {
-                return itemCategory === 'web' || itemCategory === 'frontend';
-              } else if (jobTitleLower.includes('devops') || jobTitleLower.includes('sre') || jobTitleLower.includes('site reliability')) {
-                return itemCategory === 'devops' || itemCategory === 'cloud';
-              } else if (jobTitleLower.includes('security')) {
-                return itemCategory === 'security';
-              } else if (jobTitleLower.includes('data engineer') || jobTitleLower.includes('data pipeline')) {
-                return itemCategory === 'ai' || itemCategory === 'backend';
-              } else if (jobTitleLower.includes('machine learning') || jobTitleLower.includes('ml ') || jobTitleLower.includes('ai ') || 
-                         jobTitleLower.includes('ai engineer') || jobTitleLower.includes('ml engineer') || 
-                         jobTitleLower.includes('deep learning') || jobTitleLower.includes('data scientist') ||
-                         jobTitleLower.includes('mlops') || jobTitleLower.includes('nlp') ||
-                         jobTitleLower.includes('computer vision') || jobTitleLower.includes('llm') ||
-                         jobTitleLower.includes('genai') || jobTitleLower.includes('generative ai') ||
-                         jobTitleLower.includes('artificial intelligence') || jobTitleLower.includes('ai/ml') ||
-                         jobTitleLower.includes('ml/ai') || jobTitleLower.includes('prompt engineer') ||
-                         jobTitleLower.includes('applied scientist') || jobTitleLower.includes('research scientist') ||
-                         jobTitleLower.includes('ai researcher') || jobTitleLower.includes('ai specialist') ||
-                         jobTitleLower.includes('ai developer') || jobTitleLower.includes('cv engineer') ||
-                         jobTitleLower.includes('neural') || jobTitleLower.includes('ai ops')) {
-                return itemCategory === 'ai';
-              } else if (jobTitleLower.includes('architect')) {
-                return itemCategory === 'architecture';
-              } else if (jobTitleLower.includes('backend') || jobTitleLower.includes('back-end')) {
-                return itemCategory === 'backend';
-              } else if (jobTitleLower.includes('cloud')) {
-                return itemCategory === 'cloud';
-              }
-              // For general roles, accept general content
-              return itemCategory === 'general';
-            });
-            
-            if (roleAppropriateContent.length > 0) {
-              selectedContent = roleAppropriateContent[Math.floor(Math.random() * roleAppropriateContent.length)];
-              console.log(`✅ Using role-appropriate content: ${selectedContent.value} (${selectedContent.category}) for placeholder ${placeholderType}`);
-            } else {
-              // Fallback: If we're close to the target and having trouble finding content, use any related content
-              const remainingForDifficulty = targetCount - currentCounts[difficulty];
-              const shouldUseFallback = remainingForDifficulty <= 3 && contentItems.length > 0;
-              
-              if (shouldUseFallback) {
-                // Use any available content from the pool (more lenient)
-                selectedContent = contentItems[Math.floor(Math.random() * contentItems.length)];
-                console.log(`⚠️ Using fallback content: ${selectedContent.value} (${selectedContent.category}) - ${remainingForDifficulty} questions remaining`);
-              } else {
-                // Strict mode: Mark as invalid and skip this question
-                console.warn(`❌ No role-appropriate content found for ${placeholderType} in ${jobTitle} role. Skipping question.`);
-                hasInvalidContent = true;
-                break; // Exit the placeholder loop early
-              }
-            }
-          }
-          
-          if (selectedContent) {
-            questionText = questionText.replace(placeholder, selectedContent.value);
-          }
-        } else {
-          // If no content pool items, mark as invalid
-          console.warn(`❌ No content pool for ${placeholderType}. Skipping question.`);
-          hasInvalidContent = true;
-          break;
+        const built = buildQuestionFromTemplate({
+          template,
+          targetDifficulty: difficulty,
+          roleProfile,
+          requiredSkills,
+          title,
+          description,
+          contentMap
+        });
+
+        if (!built) {
+          continue;
         }
+
+        if (usedTexts.has(built.text)) {
+          continue;
+        }
+
+        if (!isQuestionStrictlyRelevant({
+          questionText: built.text,
+          roleProfile,
+          requiredSkills,
+          title,
+          description
+        })) {
+          continue;
+        }
+
+        usedTexts.add(built.text);
+        templateUsage.set(usageKey, (templateUsage.get(usageKey) || 0) + 1);
+
+        generatedQuestions.push({
+          jobId,
+          text: built.text,
+          skill: built.skill,
+          difficulty,
+          type: template.type,
+          templateId: template._id,
+          status: 'Pending',
+          isGenerated: true,
+          metadata: {
+            generatedAt: new Date(),
+            lastModified: new Date(),
+            jobSkills: requiredSkills,
+            relevantTemplate: true,
+            relevanceScore: built.relevanceScore,
+            matchedSkills: built.matchedSkills,
+            shouldShow: true,
+            roleProfile: roleProfile.name,
+            seniority: seniority.level
+          }
+        });
       }
+    }
 
-      // Skip this question if we couldn't find appropriate content for all placeholders
-      if (hasInvalidContent) {
-        continue;
-      }
+    // Backfill any missing questions with strict role-safe synthesized questions.
+    for (const difficulty of ['Easy', 'Medium', 'Hard']) {
+      const target = quotas[difficulty] || 0;
+      if (countByDifficulty(generatedQuestions, difficulty) >= target) continue;
 
-      // Check if this exact question text has been used before
-      if (usedTexts.has(questionText)) {
-        continue;
-      }
-
-      // Mark this text as used
-      usedTexts.add(questionText);
-
-      // Add generated question for this difficulty
-      questions.push({
+      backfillQuestionsForDifficulty({
+        generatedQuestions,
+        usedTexts,
+        difficulty,
+        target,
         jobId,
-        text: questionText,
-        skill: template.skillMappings?.[0] || template.skill || 'General',
-        difficulty: difficulty, // Use the loop difficulty, not template.difficulty
-        type: template.type,
-        category: template.category || 'Software Engineering', // Add category from template
-        templateId: template._id,
-        status: 'Pending',
-        isGenerated: true,
-        metadata: {
-          generatedAt: new Date(),
-          lastModified: new Date(),
-          jobSkills: jobSkills,
-          relevantTemplate: templatesToUse.includes(template)
-        }
+        roleProfile,
+        requiredSkills,
+        title,
+        description
       });
-      
-      currentCounts[difficulty]++;
-      console.log(`Generated ${currentCounts[difficulty]}/${targetCount} ${difficulty} questions`);
     }
-  }
 
-    console.log('\n' + '='.repeat(60));
-    console.log(`✅ Generation Complete: ${questions.length}/30 total questions`);
-    console.log('Difficulty distribution:', currentCounts);
-    console.log('Target: Easy: 10, Medium: 10, Hard: 10');
-    
-    // Warn if we didn't generate the full 30 questions
-    if (questions.length < 30) {
-      console.warn(`⚠️ WARNING: Only generated ${questions.length}/30 questions!`);
-      console.warn(`   Missing: Easy: ${10 - currentCounts.Easy}, Medium: ${10 - currentCounts.Medium}, Hard: ${10 - currentCounts.Hard}`);
-      console.warn(`   This may be due to strict content filtering or insufficient templates`);
-    }
-    console.log('='.repeat(60) + '\n');
+    // Emergency fallback: force-fill any remaining quota gaps with safe role-bound questions.
+    for (const difficulty of ['Easy', 'Medium', 'Hard']) {
+      const target = quotas[difficulty] || 0;
+      if (countByDifficulty(generatedQuestions, difficulty) >= target) continue;
 
-    // 7. Calculate skill relevance score for each question and filter
-    console.log('Job skills extracted:', jobSkills);
-    
-    const questionsWithRelevance = questions.map(q => {
-      // Calculate relevance score based on job skills match
-      const questionText = q.text.toLowerCase(); // Text should already have placeholders filled
-      const questionSkills = q.skillMappings || [];
-      
-      let relevanceScore = 0;
-      let matchedSkills = [];
-      
-      // Check each job skill against question content
-      jobSkills.forEach(jobSkill => {
-        const skillLower = jobSkill.toLowerCase();
-        
-        // Check if skill is in question text (direct match)
-        if (questionText.includes(skillLower)) {
-          relevanceScore += 40; // Increased weight
-          matchedSkills.push(jobSkill);
-          console.log(`Direct match found: ${jobSkill} in question`);
-        }
-        
-        // Check if skill is in question skill mappings
-        if (questionSkills.some(qs => 
-          qs.toLowerCase().includes(skillLower) || 
-          skillLower.includes(qs.toLowerCase())
-        )) {
-          relevanceScore += 30; // Increased weight
-          if (!matchedSkills.includes(jobSkill)) {
-            matchedSkills.push(jobSkill);
-          }
-          console.log(`Skill mapping match: ${jobSkill} -> ${questionSkills.join(', ')}`);
-        }
-        
-        // Check partial matches for common web technologies
-        const webTechMatches = {
-          'html': ['html5', 'markup', 'semantic html', 'html', 'user authentication', 'file upload'],
-          'css': ['css3', 'styling', 'stylesheets', 'accessibility', 'css', 'responsive', 'cross-browser'],
-          'javascript': ['js', 'es6', 'ecmascript', 'typescript', 'javascript', 'asynchronous', 'promises'],
-          'react': ['reactjs', 'react hooks', 'components', 'jsx', 'react', 'ui', 'ux'],
-          'angular': ['angularjs', 'angular 2+', 'angular', 'typescript', 'services'],
-          'typescript': ['ts', 'types', 'interfaces', 'typescript', 'angular'],
-          'sass': ['scss', 'sass', 'css preprocessors', 'styling'],
-          'less': ['less', 'css preprocessors', 'styling'],
-          'hooks': ['react hooks', 'useeffect', 'usestate', 'hooks'],
-          'components': ['components', 'react components', 'vue components', 'ui components'],
-          'state management': ['redux', 'vuex', 'context', 'state', 'state management'],
-          'ui': ['user interface', 'ui design', 'ux', 'ui'],
-          'ux': ['user experience', 'ux design', 'ui', 'ux'],
-          'responsive design': ['responsive', 'mobile first', 'media queries', 'responsive design'],
-          'cross-browser': ['browser compatibility', 'cross browser', 'cross-browser'],
-          'rest api': ['api', 'rest', 'graphql', 'rest api'],
-          'api integration': ['api', 'integration', 'rest', 'api integration'],
-          'asynchronous': ['async', 'await', 'promises', 'callbacks', 'asynchronous'],
-          'git': ['version control', 'github', 'gitlab', 'git'],
-          'version control': ['git', 'svn', 'version control', 'git'],
-          'webpack': ['bundlers', 'build tools', 'vite', 'webpack'],
-          'vite': ['bundlers', 'build tools', 'webpack', 'vite'],
-          'build tools': ['webpack', 'vite', 'rollup', 'build tools'],
-          'bundling': ['webpack', 'vite', 'parcel', 'bundling'],
-          'collaboration': ['teamwork', 'code review', 'collaboration'],
-          'webpack': ['bundling', 'build tools', 'optimization'],
-          'vite': ['bundling', 'build tools', 'optimization']
-        };
-        
-        if (webTechMatches[skillLower]) {
-          const alternatives = webTechMatches[skillLower];
-          if (alternatives.some(alt => questionText.includes(alt))) {
-            relevanceScore += 20;
-            if (!matchedSkills.includes(jobSkill)) {
-              matchedSkills.push(jobSkill);
-            }
-            console.log(`Partial match found: ${jobSkill} -> ${alternatives.join(', ')}`);
-          }
-        }
+      emergencyBackfillQuestionsForDifficulty({
+        generatedQuestions,
+        usedTexts,
+        difficulty,
+        target,
+        jobId,
+        roleProfile,
+        requiredSkills,
+        title,
+        description
       });
-      
-      // Base score for having any relevant content
-      if (matchedSkills.length > 0) {
-        relevanceScore += 20; // Increased from 10
-      }
-      
-      // Fallback: Give minimum relevance to web development questions for frontend roles
-      if (matchedSkills.length === 0 && questionText.includes('web')) {
-        relevanceScore += 15; // Increased from 5
-        matchedSkills.push('web development');
-        console.log('Fallback: web development question');
-      }
-      
-      // Universal fallback: Give minimum relevance to all web-related questions
-      if (matchedSkills.length === 0 && (
-        questionText.includes('application') || 
-        questionText.includes('development') || 
-        questionText.includes('programming') ||
-        questionText.includes('coding')
-      )) {
-        relevanceScore += 10;
-        matchedSkills.push('general development');
-        console.log('Universal fallback: development question');
-      }
-      
-      // Category-based matching: Give points for relevant categories
-      const template = templatesToUse.find(t => t._id.toString() === q.templateId?.toString());
-      if (template) {
-        const categoryLower = template.category.toLowerCase();
-        
-        // Frontend development category matches
-        if (categoryLower.includes('web') || categoryLower.includes('frontend')) {
-          relevanceScore += 8; // Increased from 3
-          if (!matchedSkills.includes('frontend development')) {
-            matchedSkills.push('frontend development');
-          }
-        }
-        
-        // Security questions match security skills
-        if (categoryLower.includes('security') && jobSkills.some(s => s.toLowerCase().includes('security'))) {
-          relevanceScore += 10; // Increased from 5
-          if (!matchedSkills.includes('security')) {
-            matchedSkills.push('security');
-          }
-        }
-        
-        // General development category bonus
-        if (categoryLower.includes('development') || categoryLower.includes('engineering')) {
-          relevanceScore += 5;
-          if (!matchedSkills.includes('development')) {
-            matchedSkills.push('development');
-          }
-        }
-      }
-      
-      // Normalize score to 0-100
-      const maxPossibleScore = jobSkills.length * 40;
-      const normalizedScore = Math.min(100, Math.round((relevanceScore / maxPossibleScore) * 100));
-      
-      console.log(`Question: ${q.text.substring(0, 50)}...`);
-      console.log(`  Matched skills: ${matchedSkills.join(', ')}`);
-      console.log(`  Score: ${relevanceScore}/${maxPossibleScore} = ${normalizedScore}%`);
-      
-      return {
-        ...q,
-        relevanceScore: normalizedScore,
-        matchedSkills: matchedSkills,
-        shouldShow: normalizedScore >= 1 // Show questions with 1%+ relevance
-      };
-    });
-    
-    // Filter to show only relevant questions
-    const relevantQuestions = questionsWithRelevance.filter(q => q.shouldShow);
-    
-    console.log(`Generated ${questions.length} total questions`);
-    console.log(`Filtered to ${relevantQuestions.length} relevant questions (1%+ skill match)`);
-    console.log('Relevance distribution:');
-    const relevanceCounts = { '90-100%': 0, '70-89%': 0, '50-69%': 0, 'Below 50%': 0 };
-    questionsWithRelevance.forEach(q => {
-      if (q.relevanceScore >= 90) relevanceCounts['90-100%']++;
-      else if (q.relevanceScore >= 70) relevanceCounts['70-89%']++;
-      else if (q.relevanceScore >= 50) relevanceCounts['50-69%']++;
-      else relevanceCounts['Below 50%']++;
-    });
-    Object.entries(relevanceCounts).forEach(([range, count]) => {
-      console.log(`  ${range}: ${count} questions`);
-    });
+    }
 
-    // 8. Save questions with relevance data
-    if (questionsWithRelevance.length > 0) {
-      await Question.insertMany(questionsWithRelevance);
-      console.log(`\n💾 Saved ${questionsWithRelevance.length} questions to database`);
-      console.log(`📋 Workflow: Recruiter reviews → Approves questions → 10 randomly selected for interview\n`);
+    const generatedCounts = {
+      Easy: countByDifficulty(generatedQuestions, 'Easy'),
+      Medium: countByDifficulty(generatedQuestions, 'Medium'),
+      Hard: countByDifficulty(generatedQuestions, 'Hard')
+    };
+
+    const missingCounts = {
+      Easy: quotas.Easy - generatedCounts.Easy,
+      Medium: quotas.Medium - generatedCounts.Medium,
+      Hard: quotas.Hard - generatedCounts.Hard
+    };
+
+    const hasMissing = Object.values(missingCounts).some(v => v > 0);
+    if (hasMissing) {
+      throw new Error(
+        `Unable to generate the required 30 balanced questions. Missing: Easy=${Math.max(0, missingCounts.Easy)}, Medium=${Math.max(0, missingCounts.Medium)}, Hard=${Math.max(0, missingCounts.Hard)}`
+      );
+    }
+
+    if (generatedQuestions.length > 0) {
+      await Question.insertMany(generatedQuestions);
+    }
+
+    const finalQuestions = await Question.find({ jobId }).select('difficulty');
+    const finalCounts = {
+      Easy: finalQuestions.filter(q => String(q.difficulty || '').toLowerCase() === 'easy').length,
+      Medium: finalQuestions.filter(q => String(q.difficulty || '').toLowerCase() === 'medium').length,
+      Hard: finalQuestions.filter(q => String(q.difficulty || '').toLowerCase() === 'hard').length
+    };
+
+    const finalHasMissing =
+      finalCounts.Easy < FIXED_DIFFICULTY_QUOTAS.Easy ||
+      finalCounts.Medium < FIXED_DIFFICULTY_QUOTAS.Medium ||
+      finalCounts.Hard < FIXED_DIFFICULTY_QUOTAS.Hard;
+
+    if (finalHasMissing) {
+      throw new Error(
+        `Job pool is still incomplete after generation. Current counts: Easy=${finalCounts.Easy}, Medium=${finalCounts.Medium}, Hard=${finalCounts.Hard}`
+      );
     }
 
     return {
       success: true,
-      message: `Generated ${questions.length} questions for recruiter review (Target: 30 total - 10 Easy, 10 Medium, 10 Hard). Recruiter will approve questions, then 10 will be randomly selected for each interview.`,
-      questions: relevantQuestions,
-      totalGenerated: questions.length,
-      relevantCount: relevantQuestions.length,
-      filteredOut: questions.length - relevantQuestions.length,
-      targetQuotas: { Easy: 10, Medium: 10, Hard: 10 },
-      actualCounts: currentCounts
+      message: `Question pool ready for ${roleProfile.name}: 30 total with fixed quotas (10 Easy, 10 Medium, 10 Hard).`,
+      questions: generatedQuestions,
+      totalGenerated: generatedQuestions.length,
+      role: roleProfile.name,
+      seniority: seniority.level,
+      targetQuotas: FIXED_DIFFICULTY_QUOTAS,
+      actualCounts: finalCounts
     };
-
   } catch (error) {
     console.error('Error generating questions:', error);
     return {
@@ -605,95 +755,613 @@ export const generateQuestionsForJob = async (jobId) => {
   }
 };
 
-// Helper function to extract skills from job description - UNIVERSAL for all roles
-function extractSkillsFromDescription(jobDescription) {
-  const foundSkills = [];
-  
-  // Extract from description if available
-  if (jobDescription && jobDescription.trim()) {
-    const lowerDescription = jobDescription.toLowerCase();
-    
-    // FRONTEND SKILLS
-    if (lowerDescription.includes('html')) foundSkills.push('html', 'html5', 'semantic html');
-    if (lowerDescription.includes('css')) foundSkills.push('css', 'css3', 'sass', 'less', 'styling');
-    if (lowerDescription.includes('javascript')) foundSkills.push('javascript', 'es6', 'ecmascript');
-    if (lowerDescription.includes('react')) foundSkills.push('react', 'react hooks', 'components', 'jsx');
-    if (lowerDescription.includes('angular')) foundSkills.push('angular', 'angularjs', 'typescript');
-    if (lowerDescription.includes('vue')) foundSkills.push('vue', 'vuejs', 'vuex');
-    if (lowerDescription.includes('typescript')) foundSkills.push('typescript', 'ts', 'types');
-    
-    // BACKEND SKILLS
-    if (lowerDescription.includes('node')) foundSkills.push('nodejs', 'express', 'npm');
-    if (lowerDescription.includes('python')) foundSkills.push('python', 'django', 'flask');
-    if (lowerDescription.includes('java')) foundSkills.push('java', 'spring', 'maven');
-    if (lowerDescription.includes('php')) foundSkills.push('php', 'laravel', 'composer');
-    if (lowerDescription.includes('ruby')) foundSkills.push('ruby', 'rails', 'sinatra');
-    if (lowerDescription.includes('c#')) foundSkills.push('csharp', 'dotnet', 'aspnet');
-    if (lowerDescription.includes('go')) foundSkills.push('golang', 'go', 'gin');
-    if (lowerDescription.includes('rust')) foundSkills.push('rust', 'cargo', 'tokio');
-    
-    // DATABASE SKILLS
-    if (lowerDescription.includes('sql')) foundSkills.push('sql', 'mysql', 'postgresql');
-    if (lowerDescription.includes('nosql')) foundSkills.push('nosql', 'mongodb', 'cassandra');
-    if (lowerDescription.includes('mongodb')) foundSkills.push('mongodb', 'mongoose', 'aggregation');
-    if (lowerDescription.includes('redis')) foundSkills.push('redis', 'caching', 'pubsub');
-    if (lowerDescription.includes('elasticsearch')) foundSkills.push('elasticsearch', 'search', 'indexing');
-    
-    // DEVOPS SKILLS
-    if (lowerDescription.includes('docker')) foundSkills.push('docker', 'containers', 'kubernetes');
-    if (lowerDescription.includes('kubernetes')) foundSkills.push('kubernetes', 'k8s', 'orchestration');
-    if (lowerDescription.includes('aws')) foundSkills.push('aws', 'ec2', 's3', 'lambda');
-    if (lowerDescription.includes('azure')) foundSkills.push('azure', 'cloud', 'app service');
-    if (lowerDescription.includes('gcp')) foundSkills.push('gcp', 'google cloud', 'compute engine');
-    if (lowerDescription.includes('jenkins')) foundSkills.push('jenkins', 'ci/cd', 'pipeline');
-    if (lowerDescription.includes('gitlab')) foundSkills.push('gitlab', 'ci/cd', 'devops');
-    if (lowerDescription.includes('terraform')) foundSkills.push('terraform', 'iac', 'infrastructure');
-    if (lowerDescription.includes('ansible')) foundSkills.push('ansible', 'automation', 'deployment');
-    
-    // SECURITY SKILLS
-    if (lowerDescription.includes('security')) foundSkills.push('security', 'authentication', 'authorization');
-    if (lowerDescription.includes('oauth')) foundSkills.push('oauth', 'jwt', 'tokens');
-    if (lowerDescription.includes('encryption')) foundSkills.push('encryption', 'ssl', 'tls');
-    if (lowerDescription.includes('penetration')) foundSkills.push('penetration testing', 'security audit');
-    if (lowerDescription.includes('vulnerability')) foundSkills.push('vulnerability assessment', 'security');
-    
-    // MOBILE SKILLS
-    if (lowerDescription.includes('android')) foundSkills.push('android', 'java', 'kotlin');
-    if (lowerDescription.includes('ios')) foundSkills.push('ios', 'swift', 'objective-c');
-    if (lowerDescription.includes('react native')) foundSkills.push('react native', 'mobile');
-    if (lowerDescription.includes('flutter')) foundSkills.push('flutter', 'dart', 'mobile');
-    if (lowerDescription.includes('swift')) foundSkills.push('swift', 'ios', 'mobile');
-    if (lowerDescription.includes('kotlin')) foundSkills.push('kotlin', 'android', 'mobile');
-    
-    // DATA SCIENCE SKILLS
-    if (lowerDescription.includes('machine learning')) foundSkills.push('machine learning', 'ml', 'ai');
-    if (lowerDescription.includes('data science')) foundSkills.push('data science', 'analytics', 'statistics');
-    if (lowerDescription.includes('python') && lowerDescription.includes('data')) foundSkills.push('pandas', 'numpy', 'jupyter');
-    if (lowerDescription.includes('tensorflow')) foundSkills.push('tensorflow', 'deep learning', 'neural networks');
-    if (lowerDescription.includes('pytorch')) foundSkills.push('pytorch', 'deep learning', 'ml');
-    if (lowerDescription.includes('jupyter')) foundSkills.push('jupyter', 'notebook', 'data analysis');
-    
-    // UI/UX SKILLS (universal)
-    if (lowerDescription.includes('ui') || lowerDescription.includes('ux')) {
-      foundSkills.push('ui design', 'ux design', 'user interface', 'user experience');
-    }
-    
-    // GENERAL DEVELOPMENT SKILLS
-    if (lowerDescription.includes('api')) foundSkills.push('rest api', 'api integration', 'graphql');
-    if (lowerDescription.includes('git')) foundSkills.push('git', 'version control', 'collaboration');
-    if (lowerDescription.includes('testing')) foundSkills.push('unit testing', 'integration testing', 'tdd');
-    if (lowerDescription.includes('agile')) foundSkills.push('agile', 'scrum', 'project management');
-    if (lowerDescription.includes('microservices')) foundSkills.push('microservices', 'distributed systems');
-    
-    // Remove duplicates and return
-    return [...new Set(foundSkills)];
-  }
-  
-  // Default skills if no description (basic web development)
-  return ['html', 'css', 'javascript'];
+function countByDifficulty(questions, difficulty) {
+  return questions.filter(q => q.difficulty === difficulty).length;
 }
 
-// Helper function to seed default templates
+function normalizeText(text) {
+  return (text || '').toLowerCase().replace(/[^a-z0-9+.#/\s-]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function tokenize(text) {
+  return normalizeText(text)
+    .split(' ')
+    .map(token => token.trim())
+    .filter(token => token.length > 1 && !TOKEN_STOPWORDS.has(token));
+}
+
+function detectRoleProfile(jobTitle, jobDescription) {
+  const title = normalizeText(jobTitle);
+  const description = normalizeText(jobDescription);
+
+  let best = null;
+  for (const profile of ROLE_PROFILES) {
+    let score = 0;
+
+    for (const keyword of profile.titleKeywords) {
+      if (title.includes(keyword)) score += 6;
+    }
+
+    for (const keyword of profile.descriptionKeywords) {
+      if (description.includes(keyword)) score += 3;
+    }
+
+    for (const skill of profile.primarySkills) {
+      if (title.includes(skill) || description.includes(skill)) score += 2;
+    }
+
+    if (!best || score > best.score) {
+      best = { profile, score };
+    }
+  }
+
+  if (!best) return null;
+
+  if (best.score < 4) {
+    if (title.includes('engineer') || title.includes('developer')) {
+      return ROLE_PROFILES.find(p => p.key === 'general-se') || null;
+    }
+    return null;
+  }
+
+  return best.profile;
+}
+
+function detectSeniority(jobTitle, jobDescription) {
+  const text = normalizeText(`${jobTitle} ${jobDescription}`);
+
+  for (const band of SENIORITY_BANDS) {
+    if (band.keywords.some(keyword => text.includes(keyword))) {
+      return band;
+    }
+  }
+
+  // Parse explicit years of experience as backup.
+  const yearsMatches = text.match(/(\d+)\+?\s*years?/g) || [];
+  let maxYears = 0;
+  for (const match of yearsMatches) {
+    const parsed = parseInt(match, 10);
+    if (!Number.isNaN(parsed)) {
+      maxYears = Math.max(maxYears, parsed);
+    }
+  }
+
+  if (maxYears >= 5) {
+    return SENIORITY_BANDS.find(b => b.level === 'senior');
+  }
+  if (maxYears >= 2) {
+    return SENIORITY_BANDS.find(b => b.level === 'mid');
+  }
+
+  return SENIORITY_BANDS.find(b => b.level === 'entry');
+}
+
+function extractRequiredSkills(jobTitle, jobDescription, roleProfile) {
+  const text = normalizeText(`${jobTitle} ${jobDescription}`);
+
+  const globalSkillPatterns = [
+    'python', 'java', 'javascript', 'typescript', 'go', 'sql', 'nosql', 'mongodb', 'postgresql',
+    'redis', 'docker', 'kubernetes', 'aws', 'azure', 'gcp', 'graphql', 'rest api', 'microservices',
+    'tensorflow', 'pytorch', 'scikit-learn', 'machine learning', 'deep learning', 'model evaluation',
+    'nlp', 'computer vision', 'mlops', 'feature engineering', 'data preprocessing', 'ci/cd', 'security'
+  ];
+  const roleSpecificPatterns = ROLE_SKILL_PATTERNS[roleProfile.key] || [];
+  const roleExclusions = new Set((roleProfile.excludedKeywords || []).map(k => normalizeText(k)));
+  const crossDomainExclusions = new Set((ROLE_CROSS_DOMAIN_BLOCKLIST[roleProfile.key] || []).map(k => normalizeText(k)));
+
+  const skills = new Set();
+
+  for (const skill of roleProfile.primarySkills) {
+    if (text.includes(skill)) {
+      skills.add(skill);
+    }
+  }
+
+  for (const skill of globalSkillPatterns) {
+    if (text.includes(skill)) {
+      skills.add(skill);
+    }
+  }
+
+  for (const skill of roleSpecificPatterns) {
+    if (text.includes(skill)) {
+      skills.add(skill);
+    }
+  }
+
+  // Capture bullet-style "requirements" fragments as additional skill hints.
+  const fragments = jobDescription
+    .split(/[\n,;|]/)
+    .map(fragment => normalizeText(fragment))
+    .filter(Boolean);
+
+  for (const fragment of fragments) {
+    for (const token of tokenize(fragment)) {
+      const tokenNorm = normalizeText(token);
+      if (
+        token.length >= 3 &&
+        !roleExclusions.has(tokenNorm) &&
+        !crossDomainExclusions.has(tokenNorm)
+      ) {
+        skills.add(token);
+      }
+    }
+  }
+
+  return Array.from(skills)
+    .filter(skill => {
+      const norm = normalizeText(skill);
+      return !roleExclusions.has(norm) && !crossDomainExclusions.has(norm);
+    })
+    .slice(0, 40);
+}
+
+function filterTemplatesForRole({ templates, roleProfile, requiredSkills, title, description }) {
+  const contextTokens = new Set(tokenize(`${title} ${description} ${requiredSkills.join(' ')}`));
+
+  const inCategory = templates.filter(template => roleProfile.templateCategories.includes(template.category));
+
+  const scored = inCategory
+    .map(template => {
+      const templateTokens = new Set(tokenize([
+        template.text,
+        template.category,
+        template.skill,
+        ...(template.skillMappings || [])
+      ].join(' ')));
+
+      let overlap = 0;
+      for (const token of templateTokens) {
+        if (contextTokens.has(token)) {
+          overlap += 1;
+        }
+      }
+
+      const semanticScore = templateTokens.size > 0 ? overlap / templateTokens.size : 0;
+      return { template, semanticScore };
+    })
+    .filter(item => item.semanticScore >= 0.1)
+    .sort((a, b) => b.semanticScore - a.semanticScore)
+    .map(item => item.template);
+
+  return scored.length > 0 ? scored : inCategory;
+}
+
+function buildQuestionFromTemplate({
+  template,
+  targetDifficulty,
+  roleProfile,
+  requiredSkills,
+  title,
+  description,
+  contentMap
+}) {
+  let text = template.text;
+  const placeholders = text.match(/\{(.*?)\}/g) || [];
+  const matchedSkills = [];
+
+  for (const raw of placeholders) {
+    const placeholderType = raw.slice(1, -1);
+    const value = pickPlaceholderValue({
+      placeholderType,
+      targetDifficulty,
+      roleProfile,
+      requiredSkills,
+      title,
+      description,
+      contentMap
+    });
+
+    if (!value) {
+      return null;
+    }
+
+    text = text.replace(raw, value);
+
+    const normalizedValue = normalizeText(value);
+    if (requiredSkills.some(skill => normalizedValue.includes(normalizeText(skill)))) {
+      matchedSkills.push(value);
+    }
+  }
+
+  const chosenSkill =
+    pickBestSkillFromText(text, requiredSkills) ||
+    template.skillMappings?.[0] ||
+    template.skill ||
+    roleProfile.name;
+
+  const relevanceScore = computeRelevanceScore(text, requiredSkills, `${title} ${description}`);
+
+  return {
+    text,
+    difficulty: targetDifficulty,
+    skill: chosenSkill,
+    matchedSkills: Array.from(new Set(matchedSkills.concat(chosenSkill))).slice(0, 10),
+    relevanceScore
+  };
+}
+
+function pickPlaceholderValue({
+  placeholderType,
+  targetDifficulty,
+  roleProfile,
+  requiredSkills,
+  title,
+  description,
+  contentMap
+}) {
+  const contentItems = contentMap.get(placeholderType) || [];
+  const jobContext = normalizeText(`${title} ${description}`);
+  const allowed = new Set(roleProfile.contentCategories.map(c => normalizeText(c)));
+
+  let candidates = contentItems.filter(item => {
+    const category = normalizeText(item.category || 'general');
+    const categoryAllowed = allowed.has(category);
+    const isGeneral = category === 'general';
+    const difficultyAllowed = item.difficulty === 'Any' || item.difficulty === targetDifficulty;
+
+    // Keep strict domain relevance, but allow neutral/general content only for non-domain placeholders.
+    const isNeutralPlaceholder = ['scenario', 'challenge', 'context', 'process', 'situation', 'team_type'].includes(placeholderType);
+    return difficultyAllowed && (categoryAllowed || (isGeneral && isNeutralPlaceholder));
+  });
+
+  candidates = candidates
+    .map(item => {
+      const valueNorm = normalizeText(item.value);
+      let score = 0;
+
+      if (jobContext.includes(valueNorm)) score += 6;
+
+      if (requiredSkills.some(skill => {
+        const skillNorm = normalizeText(skill);
+        return valueNorm.includes(skillNorm) || skillNorm.includes(valueNorm);
+      })) {
+        score += 8;
+      }
+
+      if (roleProfile.primarySkills.some(skill => {
+        const skillNorm = normalizeText(skill);
+        return valueNorm.includes(skillNorm) || skillNorm.includes(valueNorm);
+      })) {
+        score += 5;
+      }
+
+      return { value: item.value, score };
+    })
+    .sort((a, b) => b.score - a.score);
+
+  if (candidates.length > 0) {
+    const topBand = candidates.filter(c => c.score === candidates[0].score).slice(0, 5);
+    return topBand[Math.floor(Math.random() * topBand.length)].value;
+  }
+
+  // Fallback: for skill/tool placeholders, use extracted required skills.
+  if (['skill', 'technology', 'framework', 'algorithm', 'model_type', 'ml_model', 'tool'].includes(placeholderType)) {
+    if (requiredSkills.length > 0) {
+      return requiredSkills[Math.floor(Math.random() * requiredSkills.length)];
+    }
+  }
+
+  return null;
+}
+
+function isQuestionStrictlyRelevant({ questionText, roleProfile, requiredSkills, title, description }) {
+  const question = normalizeText(questionText);
+  const context = normalizeText(`${title} ${description}`);
+  const crossDomainBlockList = ROLE_CROSS_DOMAIN_BLOCKLIST[roleProfile.key] || [];
+
+  const hasRoleSignal = roleProfile.primarySkills.some(skill => question.includes(normalizeText(skill)));
+  const hasRequirementSignal = requiredSkills.some(skill => question.includes(normalizeText(skill)));
+  const overlapsDescription = tokenize(question).some(token => context.includes(token));
+
+  if (!hasRoleSignal && !hasRequirementSignal && !overlapsDescription) {
+    return false;
+  }
+
+  for (const excluded of roleProfile.excludedKeywords) {
+    if (question.includes(normalizeText(excluded))) {
+      return false;
+    }
+  }
+
+  for (const blocked of crossDomainBlockList) {
+    if (question.includes(normalizeText(blocked))) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function pickBestSkillFromText(questionText, requiredSkills) {
+  const q = normalizeText(questionText);
+  for (const skill of requiredSkills) {
+    const s = normalizeText(skill);
+    if (q.includes(s)) {
+      return skill;
+    }
+  }
+  return null;
+}
+
+function computeRelevanceScore(questionText, requiredSkills, contextText) {
+  const questionTokens = new Set(tokenize(questionText));
+  const contextTokens = new Set(tokenize(contextText));
+
+  let overlapWithContext = 0;
+  for (const token of questionTokens) {
+    if (contextTokens.has(token)) overlapWithContext += 1;
+  }
+
+  let skillHits = 0;
+  const q = normalizeText(questionText);
+  for (const skill of requiredSkills) {
+    if (q.includes(normalizeText(skill))) {
+      skillHits += 1;
+    }
+  }
+
+  const contextScore = questionTokens.size > 0 ? Math.round((overlapWithContext / questionTokens.size) * 60) : 0;
+  const skillScore = requiredSkills.length > 0 ? Math.round((skillHits / requiredSkills.length) * 40) : 20;
+
+  return Math.max(0, Math.min(100, contextScore + skillScore));
+}
+
+function backfillQuestionsForDifficulty({
+  generatedQuestions,
+  usedTexts,
+  difficulty,
+  target,
+  jobId,
+  roleProfile,
+  requiredSkills,
+  title,
+  description
+}) {
+  const safeSkills = getSafeSkillCandidates(roleProfile, requiredSkills);
+
+  const questionTypeByDifficulty = {
+    Easy: 'Conceptual',
+    Medium: 'Technical',
+    Hard: 'Scenario'
+  };
+
+  let attempts = 0;
+  const maxAttempts = 400;
+  const normalizedRole = roleProfile.name;
+
+  while (countByDifficulty(generatedQuestions, difficulty) < target && attempts < maxAttempts) {
+    attempts += 1;
+
+    const skill = safeSkills[(attempts - 1) % safeSkills.length] || normalizedRole;
+    const text = buildRichFallbackQuestionText({
+      difficulty,
+      roleName: normalizedRole,
+      skill,
+      attempt: attempts
+    });
+
+    if (usedTexts.has(text)) {
+      continue;
+    }
+
+    if (!isQuestionStrictlyRelevant({
+      questionText: text,
+      roleProfile,
+      requiredSkills,
+      title,
+      description
+    })) {
+      continue;
+    }
+
+    usedTexts.add(text);
+    generatedQuestions.push({
+      jobId,
+      text,
+      skill,
+      difficulty,
+      type: questionTypeByDifficulty[difficulty] || 'Technical',
+      templateId: null,
+      status: 'Pending',
+      isGenerated: true,
+      metadata: {
+        generatedAt: new Date(),
+        lastModified: new Date(),
+        jobSkills: requiredSkills,
+        relevantTemplate: false,
+        relevanceScore: computeRelevanceScore(text, requiredSkills, `${title} ${description}`),
+        matchedSkills: [skill],
+        shouldShow: true,
+        roleProfile: roleProfile.name,
+        fallbackGenerated: true
+      }
+    });
+  }
+}
+
+function emergencyBackfillQuestionsForDifficulty({
+  generatedQuestions,
+  usedTexts,
+  difficulty,
+  target,
+  jobId,
+  roleProfile,
+  requiredSkills,
+  title,
+  description
+}) {
+  const safeSkills = getSafeSkillCandidates(roleProfile, requiredSkills);
+  const excluded = new Set((roleProfile.excludedKeywords || []).map(v => normalizeText(v)));
+  const blocked = new Set((ROLE_CROSS_DOMAIN_BLOCKLIST[roleProfile.key] || []).map(v => normalizeText(v)));
+
+  const questionTypeByDifficulty = {
+    Easy: 'Conceptual',
+    Medium: 'Technical',
+    Hard: 'Scenario'
+  };
+
+  let attempts = 0;
+  const maxAttempts = 1500;
+  while (countByDifficulty(generatedQuestions, difficulty) < target && attempts < maxAttempts) {
+    attempts += 1;
+
+    const skill = safeSkills[(attempts - 1) % safeSkills.length] || roleProfile.name;
+    const text = buildRichFallbackQuestionText({
+      difficulty,
+      roleName: roleProfile.name,
+      skill,
+      attempt: attempts + 1000
+    });
+    const normalized = normalizeText(text);
+
+    if (usedTexts.has(text)) continue;
+    if (Array.from(excluded).some(term => normalized.includes(term))) continue;
+    if (Array.from(blocked).some(term => normalized.includes(term))) continue;
+
+    usedTexts.add(text);
+    generatedQuestions.push({
+      jobId,
+      text,
+      skill,
+      difficulty,
+      type: questionTypeByDifficulty[difficulty] || 'Technical',
+      templateId: null,
+      status: 'Pending',
+      isGenerated: true,
+      metadata: {
+        generatedAt: new Date(),
+        lastModified: new Date(),
+        jobSkills: requiredSkills,
+        relevantTemplate: false,
+        relevanceScore: computeRelevanceScore(text, requiredSkills, `${title} ${description}`),
+        matchedSkills: [skill],
+        shouldShow: true,
+        roleProfile: roleProfile.name,
+        emergencyFallbackGenerated: true
+      }
+    });
+  }
+}
+
+function buildRichFallbackQuestionText({ difficulty, roleName, skill, attempt }) {
+  const scopes = [
+    'performance and latency',
+    'scalability and reliability',
+    'security and compliance',
+    'maintainability and testing',
+    'observability and debugging',
+    'cost and operational efficiency'
+  ];
+  const contexts = [
+    'a greenfield project',
+    'a legacy migration',
+    'a high-traffic production service',
+    'a distributed multi-team environment',
+    'an incident recovery scenario',
+    'a strict deadline delivery environment'
+  ];
+  const tasks = {
+    Easy: [
+      'explain the core concepts',
+      'describe the basic workflow',
+      'identify common use cases',
+      'outline key terminology'
+    ],
+    Medium: [
+      'design an implementation approach',
+      'compare trade-offs and choose a solution',
+      'debug a practical issue and resolve it',
+      'improve an existing implementation'
+    ],
+    Hard: [
+      'design a resilient architecture and defend your decisions',
+      'handle a complex failure scenario end-to-end',
+      'optimize a constrained system under real-world trade-offs',
+      'define long-term reliability and scaling strategy'
+    ]
+  };
+
+  const taskList = tasks[difficulty] || tasks.Medium;
+  const task = taskList[(attempt - 1) % taskList.length];
+  const scope = scopes[Math.floor((attempt - 1) / taskList.length) % scopes.length];
+  const context = contexts[Math.floor((attempt - 1) / (taskList.length * scopes.length)) % contexts.length];
+
+  if (difficulty === 'Easy') {
+    return `For a ${roleName} position, ${task} for ${skill}, focusing on ${scope} in ${context}.`;
+  }
+  if (difficulty === 'Hard') {
+    return `For a senior ${roleName} interview, ${task} using ${skill}, with emphasis on ${scope} in ${context}.`;
+  }
+  return `As a ${roleName}, ${task} with ${skill}, considering ${scope} in ${context}.`;
+}
+
+function getSafeSkillCandidates(roleProfile, requiredSkills) {
+  const blocked = new Set((ROLE_CROSS_DOMAIN_BLOCKLIST[roleProfile.key] || []).map(v => normalizeText(v)));
+  const excluded = new Set((roleProfile.excludedKeywords || []).map(v => normalizeText(v)));
+
+  const roleSkills = ROLE_SKILL_PATTERNS[roleProfile.key] || [];
+  const candidates = [...requiredSkills, ...roleProfile.primarySkills, ...roleSkills]
+    .map(v => String(v || '').trim())
+    .filter(Boolean)
+    .filter(v => {
+      const n = normalizeText(v);
+      return !blocked.has(n) && !excluded.has(n);
+    });
+
+  const unique = Array.from(new Set(candidates));
+  if (unique.length > 0) return unique;
+
+  return [roleProfile.name];
+}
+
 async function seedDefaultTemplates() {
-  return await QuestionTemplate.insertMany(DEFAULT_TEMPLATES);
+  return QuestionTemplate.insertMany(DEFAULT_TEMPLATES);
+}
+
+export async function getJobQuestionDifficultyCounts(jobId) {
+  const existing = await Question.find({ jobId }).select('difficulty');
+  return {
+    Easy: existing.filter(q => String(q.difficulty || '').toLowerCase() === 'easy').length,
+    Medium: existing.filter(q => String(q.difficulty || '').toLowerCase() === 'medium').length,
+    Hard: existing.filter(q => String(q.difficulty || '').toLowerCase() === 'hard').length
+  };
+}
+
+function isCompleteBalancedPool(counts) {
+  return (
+    counts.Easy >= FIXED_DIFFICULTY_QUOTAS.Easy &&
+    counts.Medium >= FIXED_DIFFICULTY_QUOTAS.Medium &&
+    counts.Hard >= FIXED_DIFFICULTY_QUOTAS.Hard
+  );
+}
+
+export async function ensureCompleteQuestionPoolForJob(jobId, maxAttempts = 3) {
+  let lastResult = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    lastResult = await generateQuestionsForJob(jobId);
+    const counts = await getJobQuestionDifficultyCounts(jobId);
+
+    if (isCompleteBalancedPool(counts)) {
+      return {
+        success: true,
+        message: `Question pool is complete after attempt ${attempt}.`,
+        attemptsUsed: attempt,
+        actualCounts: counts,
+        targetQuotas: FIXED_DIFFICULTY_QUOTAS,
+        lastResult
+      };
+    }
+  }
+
+  const finalCounts = await getJobQuestionDifficultyCounts(jobId);
+  return {
+    success: false,
+    message: 'Unable to complete 30-question balanced pool after retries.',
+    attemptsUsed: maxAttempts,
+    actualCounts: finalCounts,
+    targetQuotas: FIXED_DIFFICULTY_QUOTAS,
+    lastResult
+  };
 }

@@ -25,6 +25,7 @@ const UnifiedInterviewInterface: React.FC<UnifiedInterviewInterfaceProps> = ({ c
   const recordingStartTimeRef = useRef<number>(0);
 
   // Initialize: Fetch interview context and start recording
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const initializeInterview = async () => {
       try {
@@ -202,6 +203,7 @@ const UnifiedInterviewInterface: React.FC<UnifiedInterviewInterfaceProps> = ({ c
   };
 
   // Global 60-second timer for each question
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!context || !isRecording) return;
 

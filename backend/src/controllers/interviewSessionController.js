@@ -10,13 +10,19 @@ import fs from 'fs';
 import path from 'path';
 import { Readable } from 'stream';
 import { evaluateWithGemini } from '../services/geminiEvaluation.js';
+import {
+  selectBalancedQuestionsForInterview,
+  INTERVIEW_DIFFICULTY_DISTRIBUTION,
+  TOTAL_INTERVIEW_QUESTIONS
+} from '../services/questionRandomizationService.js';
 
 const INTERVIEW_MODULE_URL = process.env.INTERVIEW_MODULE_URL || 'http://localhost:5001';
 
 /**
  * POST /api/skillselect/interview-context
  * Called by frontend when candidate opens the interview page.
- * Fetches 10 approved questions for the job and returns them with a session token.
+ * Fetches approved questions for the job and returns a balanced randomized set
+ * (3 Easy, 4 Medium, 3 Hard) with a session token.
  */
 export const getInterviewContext = async (req, res) => {
   try {
@@ -62,16 +68,24 @@ export const getInterviewContext = async (req, res) => {
       status: 'Approved'
     });
 
-    if (questions.length < 10) {
+    if (questions.length < TOTAL_INTERVIEW_QUESTIONS) {
       return res.status(400).json({
         success: false,
-        message: `Not enough approved questions. Found ${questions.length}, need at least 10.`
+        message: `Not enough approved questions. Found ${questions.length}, need at least ${TOTAL_INTERVIEW_QUESTIONS}.`
       });
     }
 
-    // Shuffle and pick 10 random questions
-    const shuffled = questions.sort(() => Math.random() - 0.5);
-    const selected = shuffled.slice(0, 10);
+    // Randomized selection with enforced per-session balanced difficulty.
+    let selected = [];
+    try {
+      selected = selectBalancedQuestionsForInterview(questions);
+    } catch (selectionError) {
+      return res.status(400).json({
+        success: false,
+        message: selectionError.message,
+        requiredDistribution: INTERVIEW_DIFFICULTY_DISTRIBUTION
+      });
+    }
 
     // Collect unique skills as keywords for analysis
     const keywords = [...new Set(selected.map(q => q.skill).filter(Boolean))];

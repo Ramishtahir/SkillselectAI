@@ -1,18 +1,38 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom';
+import { useNavigate } from 'react-router-dom';
 import './AuthModal.css';
 
-const AuthModal = ({ isOpen, onClose, onAuthSuccess }) => {
+const AuthModal = ({ isOpen, onClose, onAuthSuccess, initialMode = 'login' }) => {
+  const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email);
+  const isStrongPassword = (password) => {
+    if (typeof password !== 'string') return false;
+    if (password.length < 8) return false;
+    const hasLetter = /[A-Za-z]/.test(password);
+    const hasNumber = /\d/.test(password);
+    return hasLetter && hasNumber;
+  };
+  const navigate = useNavigate();
+
   // Default to false (Sign In) or true (Sign Up) depending on your preference
-  const [isSignUpActive, setIsSignUpActive] = useState(false);
+  const [isSignUpActive, setIsSignUpActive] = useState(initialMode === 'signup');
   const [signUpName, setSignUpName] = useState('');
   const [signUpEmail, setSignUpEmail] = useState('');
+  const [signUpEmailError, setSignUpEmailError] = useState('');
   const [signUpPassword, setSignUpPassword] = useState('');
+  const [signUpPasswordError, setSignUpPasswordError] = useState('');
   const [signUpConfirmPassword, setSignUpConfirmPassword] = useState('');
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [authError, setAuthError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      setIsSignUpActive(initialMode === 'signup');
+      setAuthError('');
+    }
+  }, [initialMode, isOpen]);
 
   const handleRegisterClick = () => {
     setIsSignUpActive(true);
@@ -26,6 +46,40 @@ const AuthModal = ({ isOpen, onClose, onAuthSuccess }) => {
     e.stopPropagation();
   };
 
+  const handleSignUpEmailChange = (e) => {
+    const value = e.target.value;
+    setSignUpEmail(value);
+
+    if (!value) {
+      setSignUpEmailError('');
+      return;
+    }
+
+    if (!isValidEmail(value)) {
+      setSignUpEmailError('Please enter a valid email address (example: user@example.com).');
+      return;
+    }
+
+    setSignUpEmailError('');
+  };
+
+  const handleSignUpPasswordChange = (e) => {
+    const value = e.target.value;
+    setSignUpPassword(value);
+
+    if (!value) {
+      setSignUpPasswordError('');
+      return;
+    }
+
+    if (!isStrongPassword(value)) {
+      setSignUpPasswordError('Password must be at least 8 characters and include letters and numbers.');
+      return;
+    }
+
+    setSignUpPasswordError('');
+  };
+
   const handleSignUpSubmit = async (e) => {
     e.preventDefault();
     setAuthError('');
@@ -36,6 +90,14 @@ const AuthModal = ({ isOpen, onClose, onAuthSuccess }) => {
     }
     if (signUpPassword !== signUpConfirmPassword) {
       setAuthError('Passwords do not match.');
+      return;
+    }
+    if (!isStrongPassword(signUpPassword)) {
+      setSignUpPasswordError('Password must be at least 8 characters and include letters and numbers.');
+      return;
+    }
+    if (!isValidEmail(signUpEmail)) {
+      setSignUpEmailError('Please enter a valid email address (example: user@example.com).');
       return;
     }
 
@@ -142,6 +204,11 @@ const AuthModal = ({ isOpen, onClose, onAuthSuccess }) => {
 
   if (!isOpen) return null;
 
+  const isSignUpEmailValid = isValidEmail(signUpEmail);
+  const isSignUpPasswordValid = isStrongPassword(signUpPassword);
+  const isSignUpSubmitDisabled =
+    isSubmitting || !signUpName || !signUpPassword || !signUpConfirmPassword || !isSignUpEmailValid || !isSignUpPasswordValid;
+
   const modalContent = (
     <div className="auth-modal-overlay" onClick={onClose}>
       <div 
@@ -171,19 +238,25 @@ const AuthModal = ({ isOpen, onClose, onAuthSuccess }) => {
                   type="email"
                   placeholder="Email"
                   value={signUpEmail}
-                  onChange={(e) => setSignUpEmail(e.target.value)}
+                  onChange={handleSignUpEmailChange}
+                  className={signUpEmail && !isSignUpEmailValid ? 'input-invalid' : ''}
+                  aria-invalid={signUpEmail && !isSignUpEmailValid}
                 />
                 <i className="fas fa-envelope input-icon"></i>
             </div>
+            {signUpEmailError && <p className="input-error-text">{signUpEmailError}</p>}
             <div className="input-group">
                 <input
                   type="password"
                   placeholder="Password"
                   value={signUpPassword}
-                  onChange={(e) => setSignUpPassword(e.target.value)}
+                  onChange={handleSignUpPasswordChange}
+                  className={signUpPassword && !isSignUpPasswordValid ? 'input-invalid' : ''}
+                  aria-invalid={signUpPassword && !isSignUpPasswordValid}
                 />
                 <i className="fas fa-lock input-icon"></i>
             </div>
+            {signUpPasswordError && <p className="input-error-text">{signUpPasswordError}</p>}
             <div className="input-group">
                 <input
                   type="password"
@@ -195,7 +268,7 @@ const AuthModal = ({ isOpen, onClose, onAuthSuccess }) => {
             </div>
 
             {authError && <p style={{ color: '#ff6b6b', marginTop: '10px' }}>{authError}</p>}
-            <button className="auth-btn purple-btn" disabled={isSubmitting}>
+            <button className="auth-btn purple-btn" disabled={isSignUpSubmitDisabled}>
               {isSubmitting ? 'Processing...' : 'Register'}
             </button>
           </form>
@@ -225,7 +298,13 @@ const AuthModal = ({ isOpen, onClose, onAuthSuccess }) => {
                  <i className="fas fa-lock input-icon"></i>
             </div>
             
-            <button type="button" className="forgot-pass-btn">Forgot your password?</button>
+            <button
+              type="button"
+              className="forgot-pass-btn"
+              onClick={() => navigate('/forgot-password')}
+            >
+              Forgot your password?
+            </button>
             {authError && <p style={{ color: '#ff6b6b', marginTop: '10px' }}>{authError}</p>}
             <button className="auth-btn purple-btn" disabled={isSubmitting}>
               {isSubmitting ? 'Processing...' : 'Login'}
