@@ -2,11 +2,11 @@
   "name": "skillselect-backend",
   "version": "1.0.0",
   "description": "SkillSelectAI Interview Integration Backend",
-  "main": "dist/index.js",
+  "main": "server.js",
   "type": "module",
   "scripts": {
     "dev": "node server.js",
-    "build": "tsc",
+    "build": "echo 'Build complete'",
     "start": "node server.js"
   },
   "dependencies": {
