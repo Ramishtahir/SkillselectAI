@@ -1,0 +1,39 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Start Frontend",
+			"type": "shell",
+			"command": "Set-Location -LiteralPath '${workspaceFolder}\\frontend'; npm start",
+			"isBackground": true,
+			"problemMatcher": []
+		},
+		{
+			"label": "Start Backend",
+			"type": "shell",
+			"command": "Set-Location -LiteralPath '${workspaceFolder}\\backend'; npm run dev",
+			"isBackground": true,
+			"problemMatcher": []
+		},
+		{
+			"label": "Start InterviewModule (Flask)",
+			"type": "shell",
+			"command": "Set-Location -LiteralPath '${workspaceFolder}\\InterviewModule'; . .\\venv310\\Scripts\\Activate.ps1; python run.py",
+			"isBackground": true,
+			"problemMatcher": []
+		},
+		{
+			"label": "Start Celery Worker",
+			"type": "shell",
+			"command": "Set-Location -LiteralPath '${workspaceFolder}\\InterviewModule'; . .\\venv310\\Scripts\\Activate.ps1; celery -A celery_app.celery worker --loglevel=info --pool=solo",
+			"isBackground": true,
+			"problemMatcher": []
+		},
+		{
+			"label": "Start All Services",
+			"dependsOn": ["Start Backend", "Start Frontend", "Start InterviewModule (Flask)", "Start Celery Worker"],
+			"dependsOrder": "parallel",
+			"problemMatcher": []
+		}
+	]
+}
